@@ -1,6 +1,5 @@
 package org.cocos2dx.lib
 
-import android.opengl.GLSurfaceView
 import android.os.Build
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10

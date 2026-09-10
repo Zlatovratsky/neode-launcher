@@ -3,7 +3,6 @@ package org.cocos2dx.lib
 import android.app.Activity
 import android.content.Context
 import android.hardware.input.InputManager
-import android.opengl.GLSurfaceView
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -74,9 +73,7 @@ class Cocos2dxGLSurfaceView(context: Context) : GLSurfaceView(context) {
         }
 
     fun initView() {
-        setEGLContextClientVersion(2)
         isFocusableInTouchMode = true
-        preserveEGLContextOnPause = true
         cocos2dxGLSurfaceView = this
         cocos2dxTextInputWrapper = Cocos2dxTextInputWrapper(this)
         Cocos2dxGLSurfaceView.handler = object : Handler(Looper.getMainLooper()) {
@@ -147,13 +144,11 @@ class Cocos2dxGLSurfaceView(context: Context) : GLSurfaceView(context) {
 
     override fun onPause() {
         queueEvent { cocos2dxRenderer.handleOnPause() }
-        renderMode = RENDERMODE_WHEN_DIRTY
         super.onPause()
     }
 
     override fun onResume() {
         super.onResume()
-        renderMode = RENDERMODE_CONTINUOUSLY
         queueEvent { cocos2dxRenderer.handleOnResume() }
     }
 
