@@ -11,3 +11,6 @@ local.properties
 app/release/
 .vscode/
 .kotlin/
+app/src/main/java/org/cocos2dx/lib/GLSurfaceView.kt
+app/src/main/java/org/cocos2dx/lib/GLSurfaceView.txt
+app/src/main/java/org/cocos2dx/lib/GLSurfaceView.kt

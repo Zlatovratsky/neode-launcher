@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.Message
+import android.os.Process
 import android.util.Log
 import android.view.InputDevice
 import android.view.KeyEvent
@@ -73,6 +74,8 @@ class Cocos2dxGLSurfaceView(context: Context) : GLSurfaceView(context) {
         }
 
     fun initView() {
+        Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_DISPLAY)
+
         isFocusableInTouchMode = true
         cocos2dxGLSurfaceView = this
         cocos2dxTextInputWrapper = Cocos2dxTextInputWrapper(this)
@@ -143,13 +146,11 @@ class Cocos2dxGLSurfaceView(context: Context) : GLSurfaceView(context) {
     }
 
     override fun onPause() {
-        queueEvent { cocos2dxRenderer.handleOnPause() }
         super.onPause()
     }
 
     override fun onResume() {
         super.onResume()
-        queueEvent { cocos2dxRenderer.handleOnResume() }
     }
 
     private fun sendNextEventTimestamp(timestamp: Long) {

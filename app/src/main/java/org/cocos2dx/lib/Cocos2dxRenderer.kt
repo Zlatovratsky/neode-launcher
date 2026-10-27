@@ -79,37 +79,19 @@ class Cocos2dxRenderer(private var handler: Cocos2dxGLSurfaceView) : GLSurfaceVi
         screenHeight = surfaceHeight
     }
 
-    override fun onSurfaceCreated(gl10: GL10?, eglConfig: EGLConfig?) {
+    override fun onSurfaceCreated() {
         nativeInit(screenWidth, screenHeight)
         lastTickInNanoSeconds = System.nanoTime()
     }
 
-    override fun onSurfaceChanged(gl10: GL10?, width: Int, height: Int) {
+    override fun onSurfaceChanged() {
         if (setFrameRate && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             handler.updateRefreshRate()
         }
-
-        println("renderer surfaceChanged: ${width}x${height}@${handler.display.refreshRate}fps")
     }
 
-    override fun onDrawFrame(gl: GL10?) {
-        val animationInterval = mAnimationInterval
-        if (animationInterval == null) {
-            nativeRender()
-        } else {
-            nativeRender()
-
-            val now = System.nanoTime()
-            val interval = now - this.lastTickInNanoSeconds
-
-            if (interval < animationInterval) {
-                try {
-                    Thread.sleep((animationInterval - interval) / NANOSECONDS_PER_MICROSECOND)
-                } catch (e: Exception) {}
-            }
-
-            lastTickInNanoSeconds = System.nanoTime()
-        }
+    override fun onDrawFrame() {
+        nativeRender()
     }
 
     fun handleActionDown(id: Int, x: Float, y: Float, timestamp: Double) {
@@ -132,11 +114,11 @@ class Cocos2dxRenderer(private var handler: Cocos2dxGLSurfaceView) : GLSurfaceVi
         nativeKeyDown(keyCode)
     }
 
-    fun handleOnPause() {
+    override fun handleOnPause() {
         nativeOnPause()
     }
 
-    fun handleOnResume() {
+    override fun handleOnResume() {
         nativeOnResume()
     }
 
