@@ -36,11 +36,7 @@ jobs:
 
     - name: Build project
       run: |
-        ./gradlew app:assemble${{ matrix.config.name }} \
-          -Pandroid.injected.signing.store.file="$HOME/release.keystore" \
-          -Pandroid.injected.signing.store.password="${{secrets.KEYSTORE_PASSWORD}}" \
-          -Pandroid.injected.signing.key.alias="${{secrets.KEY_ALIAS}}" \
-          -Pandroid.injected.signing.key.password="${{secrets.KEY_PASSWORD}}"
+        ./gradlew app:assemble$
 
     - name: Rename universal apk
       id: rename_apk_universal
