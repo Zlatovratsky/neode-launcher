@@ -46,11 +46,7 @@ jobs:
       run: |
         ./gradlew app:bundleGooglePlayRelease -PdisableAbiSplits
 
-    - name: Rename universal apk
-      id: rename_apk_universal
-      if: ${{ matrix.config.flavor == 'standard' }}
-      run: |
-        SHORT_SHA=${GITHUB_SHA::7}    - name: Rename universal apk
+   - name: Rename universal apk
       id: rename_apk_universal
       if: ${{ matrix.config.flavor == 'standard' }}
       run: |
