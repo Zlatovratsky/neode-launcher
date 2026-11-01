@@ -25,8 +25,8 @@ import okio.sink
 import okio.source
 import java.io.File
 import java.io.FileNotFoundException
-import java.io.IOException
 import java.io.InterruptedIOException
+import java.io.IOException
 import kotlin.math.max
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.minutes
@@ -75,7 +75,8 @@ class ReleaseManager private constructor(
 
     class UpdateException(reason: Reason? = null, cause: Throwable? = null) : Exception(reason?.name, cause) {
         enum class Reason {
-            EXTERNAL_FILE_IN_USE
+            EXTERNAL_FILE_IN_USE,
+            HASH_VALIDATION_FAILED
         }
 
         var reason: Reason? = reason
@@ -155,17 +156,17 @@ class ReleaseManager private constructor(
         val outputFile = File(outputDirectory, download.filename)
 
         try {
-            DownloadUtils.downloadStream(
+            val hash = DownloadUtils.downloadFile(
                 httpClient,
                 download.url,
-                onResponse = { body ->
-                    body.source().use { source ->
-                        outputFile.sink().buffer().use { sink ->
-                            sink.writeAll(source)
-                        }
-                    }
-                }
+                outputFile
             )
+
+            if (download.hash != null && download.hash != hash) {
+                Log.w("ReleaseManager", "downloadLauncherUpdate failed: found $hash but expected ${download.hash}")
+                outputFile.delete()
+                throw UpdateException(UpdateException.Reason.HASH_VALIDATION_FAILED)
+            }
         } catch (e: Exception) {
             return Result.failure(e)
         }
@@ -183,42 +184,52 @@ class ReleaseManager private constructor(
 
         val finalDir = LaunchUtils.getGeodeResourcesDirectory(applicationContext)
 
+        val downloadFile = getTempFile("resources.zip")
+
         try {
             if (!outputDir.exists()) {
                 outputDir.mkdirs()
             }
 
-            DownloadUtils.downloadStream(
+            val hash = DownloadUtils.downloadFile(
                 httpClient,
                 resourceAsset.url,
+                downloadFile,
                 onProgress = { progress, outOf ->
                     if (!skipStateUpdate)
                         _uiState.value = ReleaseManagerState.InDownload(initialSize + progress, outOf + initialSize)
                 },
-                onResponse = { body ->
-                    DownloadUtils.copyZipStreamToDirectory(
-                        body.byteStream(),
-                        outputDir
-                    )
-
-                    if (finalDir.exists()) {
-                        finalDir.deleteRecursively()
-                    }
-
-                    if (!outputDir.renameTo(finalDir)) {
-                        println("Failed to rename temporary directory!")
-                        DownloadUtils.copyDirectory(outputDir, finalDir)
-                    }
-                }
             )
+
+            if (resourceAsset.hash != null && resourceAsset.hash != hash) {
+                Log.w("ReleaseManager", "performResourceDownload failed: found $hash but expected ${resourceAsset.hash}")
+                throw UpdateException(UpdateException.Reason.HASH_VALIDATION_FAILED)
+            }
+
+            downloadFile.inputStream().use { zip ->
+                DownloadUtils.copyZipStreamToDirectory(
+                    zip,
+                    outputDir
+                )
+            }
+
+            if (finalDir.exists()) {
+                finalDir.deleteRecursively()
+            }
+
+            if (!outputDir.renameTo(finalDir)) {
+                println("Failed to rename temporary directory!")
+                DownloadUtils.copyDirectory(outputDir, finalDir)
+            }
         } catch (e: Exception) {
             sendError(e)
             return false
         } finally {
             val tempPathClone = File(outputPath)
-            runCatching {
+            try {
+                if (downloadFile.exists()) downloadFile.delete()
                 if (tempPathClone.exists()) tempPathClone.deleteRecursively()
-            }
+            } catch (_: IOException) {}
         }
 
         return true
@@ -244,11 +255,13 @@ class ReleaseManager private constructor(
         val initialSize = if (releaseAsset.size == null && resourcesAsset?.size == null) null else releaseSize + resourcesSize
         _uiState.value = ReleaseManagerState.InDownload(0, initialSize)
 
-        val outputFile = getTempFile()
+        val outputFile = getTempFile(LaunchUtils.geodeFilename)
         // clone the file instance as renameTo may move the original file
         val tempFilePath = outputFile.path
 
         val geodeFile = getGeodeOutputPath()
+
+        val downloadFile = getTempFile("geode.zip")
 
         try {
             // tempFile should be in same path as geodeFile
@@ -257,45 +270,53 @@ class ReleaseManager private constructor(
                 geodeParent.mkdirs()
             }
 
-            DownloadUtils.downloadStream(
+            val hash = DownloadUtils.downloadFile(
                 httpClient,
                 releaseAsset.url,
+                downloadFile,
                 onProgress = { progress, outOf ->
                     if (!skipStateUpdate)
                         _uiState.value = ReleaseManagerState.InDownload(progress, outOf + resourcesSize)
 
                     releaseSize = max(outOf, releaseSize)
-                },
-                onResponse = { body ->
-                    DownloadUtils.extractFileFromZipStream(
-                        body.byteStream(),
-                        outputFile,
-                        geodeFile.name
-                    )
-
-                    // work around a permission issue from adb push
-                    if (geodeFile.exists()) {
-                        geodeFile.delete()
-                    }
-
-                    val renameSuccessful = runCatching {
-                        outputFile.renameTo(geodeFile)
-                    }.getOrDefault(false)
-
-                    if (!renameSuccessful) {
-                        // attempt a manual copy if rename fails for whatever reason
-                        DownloadUtils.copyFile(outputFile, geodeFile)
-                    }
                 }
             )
+
+            if (releaseAsset.hash != null && releaseAsset.hash != hash) {
+                Log.w("ReleaseManager", "performUpdate failed: found $hash but expected ${releaseAsset.hash}")
+                throw UpdateException(UpdateException.Reason.HASH_VALIDATION_FAILED)
+            }
+
+            downloadFile.inputStream().use { zip ->
+                DownloadUtils.extractFileFromZipStream(
+                    zip,
+                    outputFile,
+                    geodeFile.name
+                )
+            }
+
+            // work around a permission issue from adb push
+            if (geodeFile.exists()) {
+                geodeFile.delete()
+            }
+
+            val renameSuccessful = runCatching {
+                outputFile.renameTo(geodeFile)
+            }.getOrDefault(false)
+
+            if (!renameSuccessful) {
+                // attempt a manual copy if rename fails for whatever reason
+                DownloadUtils.copyFile(outputFile, geodeFile)
+            }
         } catch (e: Exception) {
             sendError(e)
             return
         } finally {
             val tempFileClone = File(tempFilePath)
-            runCatching {
+            try {
+                if (downloadFile.exists()) downloadFile.delete()
                 if (tempFileClone.exists()) tempFileClone.delete()
-            }
+            } catch (_: IOException) {}
         }
 
         if (resourcesAsset != null) {
@@ -331,6 +352,11 @@ class ReleaseManager private constructor(
     }
 
     private suspend fun getLatestLauncherUpdate(): DownloadableLauncherRelease? {
+        if (BuildConfig.GOOGLE_PLAY_BUILD) {
+            // don't check for updates on Google Play builds
+            return null
+        }
+
         return try {
             releaseRepository.getLatestLauncherRelease()
         } catch (e: Exception) {
@@ -340,6 +366,8 @@ class ReleaseManager private constructor(
     }
 
     suspend fun checkLauncherUpdate() {
+        if (BuildConfig.GOOGLE_PLAY_BUILD) return
+
         val launcherRelease = getLatestLauncherUpdate() ?: return
 
         // unconditionally track it, we're not using it for checks and it might be good to have
@@ -356,6 +384,8 @@ class ReleaseManager private constructor(
     }
 
     fun checkCachedLauncherUpdate() {
+        if (BuildConfig.GOOGLE_PLAY_BUILD) return
+
         val lastUpdate = PreferenceUtils.get(applicationContext)
             .getString(PreferenceUtils.Key.LAST_LAUNCHER_UPDATE) ?: return
 
@@ -365,6 +395,12 @@ class ReleaseManager private constructor(
     }
 
     suspend fun downloadLatestLauncherUpdate(): Result<File> {
+        if (BuildConfig.GOOGLE_PLAY_BUILD) {
+            return Result.failure(UnsupportedOperationException(
+                "Launcher updates are not supported on Google Play builds"
+            ))
+        }
+
         val update = _availableLauncherUpdateDetails.value
             ?: getLatestLauncherUpdate()
             ?: return Result.failure(FileNotFoundException())
@@ -373,6 +409,10 @@ class ReleaseManager private constructor(
     }
 
     fun shouldUseCache(): Boolean {
+        if (BuildConfig.GOOGLE_PLAY_BUILD) {
+            return true
+        }
+
         val sharedPreferences = PreferenceUtils.get(applicationContext)
         if (sharedPreferences.getBoolean(PreferenceUtils.Key.DISABLE_UPDATE_CACHE)) {
             return false
@@ -391,6 +431,11 @@ class ReleaseManager private constructor(
     }
 
     private suspend fun checkForNewRelease(isManual: Boolean = false) {
+        if (BuildConfig.GOOGLE_PLAY_BUILD) {
+            _uiState.value = ReleaseManagerState.Finished()
+            return
+        }
+
         val sharedPreferences = PreferenceUtils.get(applicationContext)
 
         if (!isManual && shouldUseCache()) {
@@ -481,15 +526,14 @@ class ReleaseManager private constructor(
         }
     }
 
-    private fun getTempFile(): File {
-        val geodeName = LaunchUtils.geodeFilename
+    private fun getTempFile(filename: String): File {
         val geodeDirectory = LaunchUtils.getBaseDirectory(applicationContext)
 
         // warning!! while File::createTempFile may look tempting, a certain brand of phones has a messed up implementation of it
         // so we're making a temp file manually (as long as it doesn't collide with the geode download, it's okay)
 
         val suffix = createRandomString()
-        val tmpName = "tmp-$suffix.$geodeName"
+        val tmpName = "tmp-$suffix.$filename"
 
         val tempFile = File(geodeDirectory, tmpName)
 

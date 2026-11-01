@@ -15,10 +15,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toBitmap
 import com.geode.launcher.R
-import kotlinx.datetime.Month
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.todayIn
-import kotlin.time.Clock
 
 // https://gist.github.com/tkuenneth/ddf598663f041dc79960cda503d14448?permalink_comment_id=4660486#gistcomment-4660486
 @Composable
@@ -48,6 +44,7 @@ enum class ApplicationIcon {
     GEODE,
     PRIDE,
     TRANS,
+    GREEN,
     SAPPHIRE;
 
     companion object {
@@ -57,6 +54,7 @@ enum class ApplicationIcon {
             "pride" -> PRIDE
             "trans" -> TRANS
             "sapphire" -> SAPPHIRE
+            "green" -> GREEN
             else -> DEFAULT
         }
     }
@@ -67,6 +65,7 @@ enum class ApplicationIcon {
         DEFAULT -> "default"
         TRANS -> "trans"
         SAPPHIRE -> "sapphire"
+        GREEN -> "green"
     }
 }
 
@@ -108,6 +107,12 @@ object IconUtils {
             component = "MainActivitySapphire",
             iconId = R.mipmap.ic_launcher_sapphire,
             nameId = R.string.application_icon_sapphire,
+        )
+        ApplicationIcon.GREEN -> ApplicationIconDetails(
+            id = id.toId(),
+            component = "MainActivityGreen",
+            iconId = R.mipmap.ic_launcher_green,
+            nameId = R.string.application_icon_green,
         )
     }
 }

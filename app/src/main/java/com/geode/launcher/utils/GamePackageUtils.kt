@@ -53,6 +53,8 @@ object GamePackageUtils {
         39L to "2.206",
         40L to "2.2074", // ok
         41L to "2.2081",
+        42L to "2.209",
+        43L to "2.2091",
     )
 
     /**
@@ -61,6 +63,10 @@ object GamePackageUtils {
     fun getUnifiedVersionName(packageManager: PackageManager): String {
         val versionCode = getGameVersionCode(packageManager)
         return gameVersionMap[versionCode] ?: getGameVersionString(packageManager)
+    }
+
+    fun getSupportedUnifiedVersion(): String {
+        return gameVersionMap[Constants.SUPPORTED_VERSION_CODE] ?: Constants.SUPPORTED_VERSION_STRING
     }
 
     fun detectAbiMismatch(context: Context, packageInfo: PackageInfo, loadException: Error): Boolean {

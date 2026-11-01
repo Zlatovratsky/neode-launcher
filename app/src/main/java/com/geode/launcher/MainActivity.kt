@@ -104,12 +104,24 @@ class MainActivity : ComponentActivity() {
         val gdInstalled = GamePackageUtils.isGameInstalled(packageManager)
         val geodeInstalled = LaunchUtils.isGeodeInstalled(this)
 
-        if (gdInstalled && geodeInstalled && intent.getBooleanExtra("restarted", false)) {
-            onLaunch(this)
+        val restartImmediately = intent.getBooleanExtra("restarted", false)
+        if (gdInstalled && geodeInstalled && restartImmediately) {
+            val withSafeMode = intent.getBooleanExtra("safe-mode", false)
+            onLaunch(this, withSafeMode)
         }
 
         enableEdgeToEdge()
         clearDownloadedApks(this)
+
+        // remove old Geode for the like 4 people that downloaded the Play Store build
+        @Suppress("SENSELESS_COMPARISON")
+        if (BuildConfig.PREBUNDLED_GEODE != null) {
+            val preferences = PreferenceUtils.get(this)
+            if (!preferences.getBoolean(PreferenceUtils.Key.PREBUNDLED_GEODE_MIGRATION_PERFORMED)) {
+                LaunchUtils.getInstalledGeodePath(this)?.delete()
+                preferences.setBoolean(PreferenceUtils.Key.PREBUNDLED_GEODE_MIGRATION_PERFORMED, true)
+            }
+        }
 
         val returnMessage = intent.extras?.getString(LaunchUtils.LAUNCHER_KEY_RETURN_MESSAGE)
         val returnExtendedMessage = intent.extras?.getString(LaunchUtils.LAUNCHER_KEY_RETURN_EXTENDED_MESSAGE)
@@ -207,7 +219,7 @@ fun mapCancelReasonToInfo(cancelReason: LaunchViewModel.LaunchCancelReason): Lau
         )
         LaunchViewModel.LaunchCancelReason.GAME_OUTDATED -> LaunchStatusInfo(
             title = stringResource(R.string.launcher_cancelled_error),
-            details = stringResource(R.string.launcher_cancelled_outdated)
+            details = stringResource(R.string.launcher_cancelled_outdated, GamePackageUtils.getSupportedUnifiedVersion())
         )
         LaunchViewModel.LaunchCancelReason.AUTOMATIC,
         LaunchViewModel.LaunchCancelReason.MANUAL-> LaunchStatusInfo(
@@ -256,7 +268,7 @@ fun mapLaunchStatusToInfo(state: LaunchViewModel.LaunchUIState, inSafeMode: Bool
             )
         }
         is LaunchViewModel.LaunchUIState.Cancelled -> {
-            return mapCancelReasonToInfo(state.reason)
+            mapCancelReasonToInfo(state.reason)
         }
     }
 }
@@ -716,6 +728,9 @@ fun GeodeUpdateIndicator(snackbarHostState: SnackbarHostState, onRetry: () -> Un
                 ReleaseManager.UpdateException.Reason.EXTERNAL_FILE_IN_USE -> stringResource(
                     R.string.release_fetch_external_in_use_short
                 )
+                ReleaseManager.UpdateException.Reason.HASH_VALIDATION_FAILED -> stringResource(
+                    R.string.release_fetch_hash_validation_failed_short
+                )
                 else -> stringResource(R.string.release_fetch_generic_short)
             }
         }
@@ -825,10 +840,11 @@ fun AltMainScreen(
                     )
 
                     // only show launcher update in a case where a user won't see it ingame
-                    if (launchUIState is LaunchViewModel.LaunchUIState.Cancelled) {
+                    val currentUIState = launchUIState
+                    if (currentUIState is LaunchViewModel.LaunchUIState.Cancelled) {
                         val gameVersion = remember { GamePackageUtils.getGameVersionCodeOrNull(context.packageManager) }
 
-                        if (gameVersion != null && gameVersion < Constants.SUPPORTED_VERSION_CODE_MIN_WARNING) {
+                        if (gameVersion != null && gameVersion < Constants.SUPPORTED_VERSION_CODE_MIN_WARNING && currentUIState.reason != LaunchViewModel.LaunchCancelReason.GAME_OUTDATED) {
                             UnsupportedVersionWarning()
                         }
 

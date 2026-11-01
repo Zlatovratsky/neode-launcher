@@ -4,7 +4,6 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInstaller
-import android.os.Build
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -409,7 +408,8 @@ fun LauncherUpdateIndicator(modifier: Modifier = Modifier) {
         }
     }
 
-    ElevatedCard(modifier) {
+    // there's like a single pixel of the shadow that gets clipped without this...
+    ElevatedCard(modifier = modifier.padding(bottom = 1.dp)) {
         Column(
             // buttons add enough padding already, lower to compensate
             modifier = Modifier.padding(
