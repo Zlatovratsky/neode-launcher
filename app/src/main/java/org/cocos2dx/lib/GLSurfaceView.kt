@@ -347,7 +347,7 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2, Choreographer.F
                     return false
                 }
                 
-                EGL14.eglSwapInterval(mEGLDisplay, 0)
+                // EGL14.eglSwapInterval(mEGLDisplay, 0)
                 return true
             }
 
