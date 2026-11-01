@@ -89,6 +89,7 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2, Choreographer.F
 
     override fun doFrame(frameTimeInNanos: Long) {
         mGLThread.drawFrame()
+        mChoreographer.postFrameCallback(this)
     }
 
     interface Renderer {
