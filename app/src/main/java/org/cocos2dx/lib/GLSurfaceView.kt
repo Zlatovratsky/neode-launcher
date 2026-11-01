@@ -317,11 +317,11 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
 
                 val major = IntArray(1)
                 val minor = IntArray(1)
-                if (!mEGL.eglInitialize(mEGLDisplay, major, 0, minor, 0)) {
+                if (!EGL14.eglInitialize(mEGLDisplay, major, 0, minor, 0)) {
                     throw RuntimeException("eglInitialize failed")
                 }
 
-                mEGLConfig = EGLConfigChooser.chooseConfig(mEGL, mEGLDisplay)
+                mEGLConfig = EGLConfigChooser.chooseConfig(mEGLDisplay)
                 
                 val attrib_list = intArrayOf(0x3098, 2, EGL14.EGL_NONE) 
                 mEGLContext = EGL14.eglCreateContext(mEGLDisplay, mEGLConfig, EGL14.EGL_NO_CONTEXT, attrib_list, 0)
@@ -346,7 +346,7 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
                     return false
                 }
                 
-                EGL14.eglSwapInterval(0)
+                EGL14.eglSwapInterval(mEGLDisplay, 0)
                 return true
             }
 
@@ -441,9 +441,9 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
                     )
 
                     return configs.firstNotNullOf {
-                        val config = testConfig(egl, display, it)
+                        val config = testConfig(display, it)
                         if (config != null) {
-                            printConfig(egl, display, config)
+                            printConfig(display, config)
                         }
 
                         config
