@@ -32,7 +32,6 @@ import androidx.core.net.toUri
 import androidx.documentfile.provider.DocumentFile
 import com.geode.launcher.BuildConfig
 import com.geode.launcher.R
-import com.geode.launcher.UserDirectoryProvider
 import com.geode.launcher.activityresult.GeodeOpenFileActivityResult
 import com.geode.launcher.activityresult.GeodeOpenFilesActivityResult
 import com.geode.launcher.activityresult.GeodeSaveFileActivityResult
@@ -192,10 +191,16 @@ object GeodeUtils {
 
     @JvmStatic
     fun restartGame() {
+        restartGame(false)
+    }
+
+    @JvmStatic
+    fun restartGame(safeMode: Boolean) {
         activity.get()?.run {
             packageManager.getLaunchIntentForPackage(packageName)?.also {
                 val mainIntent = Intent.makeRestartActivityTask(it.component)
                 mainIntent.putExtra("restarted", true)
+                mainIntent.putExtra("safe-mode", safeMode)
                 startActivity(mainIntent)
                 exitProcess(0)
             }
@@ -215,13 +220,15 @@ object GeodeUtils {
             val relativePath = pathFile.relativeTo(baseDirectory)
             val uri = DocumentsContract.buildDocumentUri(
                 "com.android.externalstorage.documents",
-                "primary:Android/media/${context.packageName}/$relativePath"
+                if (BuildConfig.GOOGLE_PLAY_BUILD) {
+                    "primary:Android/data/${context.packageName}/$relativePath"
+                } else {
+                    "primary:Android/media/${context.packageName}/$relativePath"
+                }
             )
 
             Intent(Intent.ACTION_VIEW).apply {
                 setDataAndType(uri, DocumentsContract.Document.MIME_TYPE_DIR)
-
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
         } else {
             Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
@@ -409,7 +416,7 @@ object GeodeUtils {
     }
 
     fun isGeodeUri(uri: Uri): Boolean {
-        return "com.geode.launcher.user" == uri.authority
+        return "${BuildConfig.APPLICATION_ID}.user" == uri.authority
     }
 
     private const val INTERNAL_PERMISSION_PREFIX = "geode.permission_internal"
@@ -428,7 +435,7 @@ object GeodeUtils {
                     Manifest.permission.WRITE_EXTERNAL_STORAGE
                 )
 
-                return permissions.all {
+                permissions.all {
                     ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
                 }
             }
@@ -793,7 +800,7 @@ object GeodeUtils {
 
     external fun internalKeyEvent(timestamp: Long, deviceId: Int, eventSource: Int, keyCode: Int, modifiers: Int, isDown: Boolean, repeatCount: Int)
     external fun internalTouchEvent(timestamp: Long, deviceId: Int, eventSource: Int, eventType: Int, ids: IntArray, xs: FloatArray, ys: FloatArray)
-    external fun internalScrollEvent(timestamp: Long, deviceId: Int, eventSource: Int, scrollX: Float, scrollY: Float)
+    external fun internalScrollEvent(timestamp: Long, deviceId: Int, eventSource: Int, scrollX: Float, scrollY: Float, mouseX: Float, mouseY: Float)
     external fun internalJoystickEvent(timestamp: Long, deviceId: Int, eventSource: Int, leftX: FloatArray, leftY: FloatArray, rightX: FloatArray, rightY: FloatArray, hatX: FloatArray, hatY: FloatArray, leftTrigger: FloatArray, rightTrigger: FloatArray)
 
     external fun inputDeviceAdded(deviceId: Int)

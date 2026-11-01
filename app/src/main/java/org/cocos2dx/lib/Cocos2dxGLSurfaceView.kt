@@ -2,17 +2,20 @@ package org.cocos2dx.lib
 
 import android.app.Activity
 import android.content.Context
+import android.content.res.Configuration
 import android.hardware.input.InputManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.Message
 import android.os.Process
-import android.util.Log
+import android.text.InputType
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.Surface
+import android.view.WindowInsets
+import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import androidx.annotation.RequiresApi
 import androidx.appcompat.widget.AppCompatEditText
@@ -25,11 +28,54 @@ private const val HANDLER_CLOSE_IME_KEYBOARD = 3
 private const val MS_TO_NS = 1_000_000
 private const val SEC_TO_NS = 1_000_000_000.0
 
+fun inputTypeForFlags(i: Int): Int {
+    if ((i and BaseRobTopActivity.KEYBOARD_INPUT_NUMERIC) != 0) {
+        return InputType.TYPE_NUMBER_FLAG_DECIMAL or InputType.TYPE_NUMBER_FLAG_SIGNED or InputType.TYPE_CLASS_NUMBER
+    }
+
+    if ((i and BaseRobTopActivity.KEYBOARD_INPUT_PASSWORD) != 0) {
+        return InputType.TYPE_TEXT_VARIATION_PASSWORD or InputType.TYPE_CLASS_TEXT
+    }
+
+    if ((i and BaseRobTopActivity.KEYBOARD_INPUT_MULTILINE) != 0) {
+        return InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES or InputType.TYPE_CLASS_TEXT
+    }
+
+    return InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS or InputType.TYPE_CLASS_TEXT
+}
+
 class Cocos2dxGLSurfaceView(context: Context) : GLSurfaceView(context) {
     companion object {
         lateinit var cocos2dxGLSurfaceView: Cocos2dxGLSurfaceView
         private lateinit var handler: Handler
         private lateinit var cocos2dxTextInputWrapper: Cocos2dxTextInputWrapper
+
+        private var keyboardVisible = false
+        private var keyboardHeight = 0
+
+        private var textInputActive = false
+
+        private fun hasHardwareKeyboard(): Boolean {
+            val config = cocos2dxGLSurfaceView.resources.configuration
+            return config.keyboard != Configuration.KEYBOARD_NOKEYS
+                    && config.hardKeyboardHidden != Configuration.HARDKEYBOARDHIDDEN_YES
+        }
+
+        private var keyboardHideCheck = Runnable {
+            if (keyboardVisible) {
+                return@Runnable
+            }
+
+            // fix for a silly 2.209 bug where the visible check forgets about the existence
+            // of keyboards that aren't visible (hardware keyboards)
+            if (textInputActive && hasHardwareKeyboard()) {
+                return@Runnable
+            }
+
+            cocos2dxGLSurfaceView.queueEvent {
+                cocos2dxGLSurfaceView.cocos2dxRenderer.handleTextClosed()
+            }
+        }
 
         @JvmStatic
         fun openIMEKeyboard() {
@@ -50,6 +96,30 @@ class Cocos2dxGLSurfaceView(context: Context) : GLSurfaceView(context) {
             cocos2dxGLSurfaceView.queueEvent {
                 Cocos2dxAccelerometer.onSensorChanged(x, y, z, timestamp)
             }
+
+        @RequiresApi(Build.VERSION_CODES.R)
+        fun onKeyboardInsets(windowInsets: WindowInsets) {
+            if (!cocos2dxGLSurfaceView.sendNewCocosEvents) {
+                return
+            }
+
+            val visible = windowInsets.isVisible(WindowInsets.Type.ime())
+            val offsetHeight = if (visible) windowInsets.getInsets(WindowInsets.Type.ime()).bottom else 0
+
+            if (visible == keyboardVisible && offsetHeight == keyboardHeight) {
+                return
+            }
+
+            keyboardVisible = visible
+            keyboardHeight = offsetHeight
+
+            handler.removeCallbacks(keyboardHideCheck)
+            if (!visible) {
+                handler.postDelayed(keyboardHideCheck, 150L)
+            } else {
+                cocos2dxGLSurfaceView.cocos2dxRenderer.handleKeyboardWillShow(keyboardHeight)
+            }
+        }
     }
 
     private lateinit var cocos2dxRenderer: Cocos2dxRenderer
@@ -65,6 +135,9 @@ class Cocos2dxGLSurfaceView(context: Context) : GLSurfaceView(context) {
         private set
     var supportsResizeEvents = false
 
+    // 2.209+ events for keyboard and such
+    var sendNewCocosEvents = false
+
     var cocos2dxEditText: AppCompatEditText? = null
         set(value) {
             field = value
@@ -72,6 +145,21 @@ class Cocos2dxGLSurfaceView(context: Context) : GLSurfaceView(context) {
             field?.setOnEditorActionListener(cocos2dxTextInputWrapper)
             requestFocus()
         }
+
+    fun usesInlineKeyboard(): Boolean {
+        if (!sendNewCocosEvents) return false
+
+        return Build.VERSION.SDK_INT >= 30
+    }
+
+    fun imeOptionsForFlags(i: Int): Int {
+        val i2 = if ((i and BaseRobTopActivity.KEYBOARD_INPUT_MULTILINE) == 0 || !usesInlineKeyboard())
+            EditorInfo.IME_ACTION_DONE else EditorInfo.IME_ACTION_NONE
+
+        return if (usesInlineKeyboard())
+            EditorInfo.IME_FLAG_NO_FULLSCREEN or EditorInfo.IME_FLAG_NO_EXTRACT_UI or i2
+        else i2
+    }
 
     fun initView() {
         Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_DISPLAY)
@@ -85,9 +173,13 @@ class Cocos2dxGLSurfaceView(context: Context) : GLSurfaceView(context) {
                     HANDLER_OPEN_IME_KEYBOARD -> {
                         if (cocos2dxEditText?.requestFocus() == true) {
                             cocos2dxEditText?.apply {
-                                removeTextChangedListener(
-                                    cocos2dxTextInputWrapper
-                                )
+                                removeTextChangedListener(cocos2dxTextInputWrapper)
+
+                                if (sendNewCocosEvents) {
+                                    inputType = inputTypeForFlags(BaseRobTopActivity.curKeyboardInputFlags)
+                                    imeOptions = imeOptionsForFlags(BaseRobTopActivity.curKeyboardInputFlags)
+                                }
+
                                 setText("")
                                 val text = msg.obj as String
                                 append(text)
@@ -96,20 +188,20 @@ class Cocos2dxGLSurfaceView(context: Context) : GLSurfaceView(context) {
                                     cocos2dxTextInputWrapper
                                 )
                             }
+
+                            textInputActive = true
                             (context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).showSoftInput(
                                 cocos2dxEditText,
                                 0
                             )
-                            Log.d("GLSurfaceView", "showSoftInput")
                             return
                         }
                         return
                     }
                     HANDLER_CLOSE_IME_KEYBOARD -> {
+                        textInputActive = false
                         cocos2dxEditText?.apply {
-                            removeTextChangedListener(
-                                cocos2dxTextInputWrapper
-                            )
+                            removeTextChangedListener(cocos2dxTextInputWrapper)
                             (context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(
                                 windowToken,
                                 0
@@ -117,8 +209,10 @@ class Cocos2dxGLSurfaceView(context: Context) : GLSurfaceView(context) {
                         }
 
                         requestFocus()
-                        Log.d("GLSurfaceView", "HideSoftInput")
-                        cocos2dxRenderer.handleTextClosed()
+
+                        queueEvent {
+                            cocos2dxRenderer.handleTextClosed()
+                        }
                         return
                     }
                     else -> return
@@ -293,6 +387,97 @@ class Cocos2dxGLSurfaceView(context: Context) : GLSurfaceView(context) {
         }
     }
 
+    private fun queueKeyboardEvent(keyCode: Int, event: KeyEvent, down: Boolean): Boolean {
+        val keypadCode = keyCode == KeyEvent.KEYCODE_MENU || keyCode == KeyEvent.KEYCODE_BACK
+        if (event.isSystem && !keypadCode) {
+            return false
+        }
+
+        if (keypadCode && BaseRobTopActivity.blockBackButton) {
+            return true
+        }
+
+        queueEvent {
+            sendNextEventTimestamp(event.eventTime * MS_TO_NS)
+        }
+
+        if (useKeyboardEvents) {
+            if (down) {
+                queueEvent {
+                    GeodeUtils.nativeKeyDown(keyCode, event.modifiers, event.repeatCount != 0)
+                }
+            } else {
+                queueEvent {
+                    GeodeUtils.nativeKeyUp(keyCode, event.modifiers)
+                }
+            }
+        }
+
+        if (controllerEventsEnabled) {
+            queueEvent {
+                GeodeUtils.internalKeyEvent(
+                    event.eventTime * MS_TO_NS,
+                    event.deviceId,
+                    event.source,
+                    event.keyCode,
+                    event.modifiers,
+                    down,
+                    event.repeatCount
+                )
+            }
+        }
+
+        // geode events override native callbacks
+        if (useKeyboardEvents || controllerEventsEnabled) {
+            return true
+        }
+
+        if (sendNewCocosEvents) {
+            if (KeyEvent.isGamepadButton(keyCode)) {
+                return false
+            }
+
+            if (keyCode == KeyEvent.KEYCODE_ESCAPE && BaseRobTopActivity.blockBackButton) {
+                return true
+            }
+
+            // messy logic
+            val isRepeat = event.repeatCount > 0
+            if (keypadCode) {
+                if (down) {
+                    if (isRepeat || BaseRobTopActivity.blockBackButton) {
+                        return true
+                    }
+
+                    queueEvent {
+                        cocos2dxRenderer.handleKeyDown(keyCode)
+                    }
+
+                    return true
+                } else {
+                    return false
+                }
+            }
+
+            val eventTimestamp = event.eventTime / 1000.0
+
+            val shiftPressed = event.isShiftPressed
+            val ctrlPressed = event.isCtrlPressed
+            val altPressed = event.isAltPressed
+
+            queueEvent {
+                cocos2dxRenderer.handleKeyboardEvent(
+                    keyCode, down, isRepeat, eventTimestamp,
+                    shiftPressed, ctrlPressed, altPressed
+                )
+            }
+
+            return true
+        }
+
+        return false
+    }
+
     private fun legacyKeyDown(keyCode: Int, keyEvent: KeyEvent): Boolean {
         return when (keyCode) {
             KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_MENU -> {
@@ -350,65 +535,19 @@ class Cocos2dxGLSurfaceView(context: Context) : GLSurfaceView(context) {
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
-        if (!useKeyboardEvents && !controllerEventsEnabled) {
+        if (!queueKeyboardEvent(keyCode, event, true)) {
             return legacyKeyDown(keyCode, event)
         }
 
-        return when (keyCode) {
-            // ignore system keys
-            KeyEvent.KEYCODE_VOLUME_DOWN, KeyEvent.KEYCODE_VOLUME_UP, KeyEvent.KEYCODE_MUTE -> {
-                super.onKeyDown(keyCode, event)
-            }
-            else -> {
-                if (BaseRobTopActivity.blockBackButton) {
-                    return true
-                }
-
-                queueEvent {
-                    sendNextEventTimestamp(event.eventTime * MS_TO_NS)
-
-                    if (useKeyboardEvents) {
-                        GeodeUtils.nativeKeyDown(keyCode, event.modifiers, event.repeatCount != 0)
-                    }
-
-                    if (controllerEventsEnabled) {
-                        GeodeUtils.internalKeyEvent(event.eventTime * MS_TO_NS, event.deviceId, event.source, event.keyCode, event.modifiers, true, event.repeatCount)
-                    }
-                }
-                true
-            }
-        }
+        return true
     }
 
     override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
-        if (!useKeyboardEvents && !controllerEventsEnabled) {
+        if (!queueKeyboardEvent(keyCode, event, false)) {
             return super.onKeyUp(keyCode, event)
         }
 
-        return when (keyCode) {
-            KeyEvent.KEYCODE_VOLUME_DOWN, KeyEvent.KEYCODE_VOLUME_UP, KeyEvent.KEYCODE_MUTE -> {
-                super.onKeyUp(keyCode, event)
-            }
-            else -> {
-                if (event.repeatCount != 0 || BaseRobTopActivity.blockBackButton) {
-                    return true
-                }
-
-                queueEvent {
-                    sendNextEventTimestamp(event.eventTime * MS_TO_NS)
-
-                    if (useKeyboardEvents) {
-                        GeodeUtils.nativeKeyUp(keyCode, event.modifiers)
-                    }
-
-                    if (controllerEventsEnabled) {
-                        GeodeUtils.internalKeyEvent(event.eventTime * MS_TO_NS, event.deviceId, event.source, event.keyCode, event.modifiers, false, event.repeatCount)
-                    }
-                }
-
-                true
-            }
-        }
+        return true
     }
 
     // i'm lazy.
@@ -471,11 +610,15 @@ class Cocos2dxGLSurfaceView(context: Context) : GLSurfaceView(context) {
     }
 
     override fun onGenericMotionEvent(event: MotionEvent?): Boolean {
-        if (!useKeyboardEvents && !controllerEventsEnabled) {
+        val hasGeodeEvents = useKeyboardEvents || controllerEventsEnabled
+        if (!hasGeodeEvents && !sendNewCocosEvents) {
             return super.onGenericMotionEvent(event)
         }
 
         if (event?.action == MotionEvent.ACTION_SCROLL) {
+            val mouseX = event.x
+            val mouseY = event.y
+
             val scrollX = event.getAxisValue(MotionEvent.AXIS_HSCROLL)
             val scrollY = event.getAxisValue(MotionEvent.AXIS_VSCROLL)
             val timestamp = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
@@ -489,7 +632,11 @@ class Cocos2dxGLSurfaceView(context: Context) : GLSurfaceView(context) {
                 }
 
                 if (controllerEventsEnabled) {
-                    GeodeUtils.internalScrollEvent(timestamp, event.deviceId, event.source, scrollX, scrollY)
+                    GeodeUtils.internalScrollEvent(timestamp, event.deviceId, event.source, scrollX, scrollY, mouseX, mouseY)
+                }
+
+                if (!hasGeodeEvents && sendNewCocosEvents) {
+                    cocos2dxRenderer.handleScroll(mouseX, mouseY, scrollY, scrollX)
                 }
             }
 

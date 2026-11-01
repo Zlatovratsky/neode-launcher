@@ -167,7 +167,8 @@ class GeometryDashActivity : AppCompatActivity(), Cocos2dxHelper.Cocos2dxHelperL
         tryLoadLibrary(gdPackageInfo, Constants.FMOD_LIB_NAME)
         tryLoadLibrary(gdPackageInfo, Constants.COCOS_LIB_NAME)
 
-        if (GamePackageUtils.getGameVersionCode(packageManager) >= 39L) {
+        val gameVersionCode = GamePackageUtils.getGameVersionCode(packageManager)
+        if (gameVersionCode >= 39L) {
             // this fix requires geode v3, which is 2.206+
             // there is a short period in which 2.206 users will still have geode v2, but whatever. ig
             LauncherFix.enableExceptionsRenaming()
@@ -178,6 +179,9 @@ class GeometryDashActivity : AppCompatActivity(), Cocos2dxHelper.Cocos2dxHelperL
         loadInternalMods()
 
         val baseView = createView()
+        if (gameVersionCode >= 42L) {
+            mGLSurfaceView?.sendNewCocosEvents = true
+        }
 
         if (!GeodeUtils.handleSafeArea && Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA) {
             val frameLayoutParams = ViewGroup.LayoutParams(
@@ -201,12 +205,22 @@ class GeometryDashActivity : AppCompatActivity(), Cocos2dxHelper.Cocos2dxHelperL
                         left = 0, top = 0, right = 0, bottom = 0
                     )
                 }
+
+                Cocos2dxGLSurfaceView.onKeyboardInsets(insets)
+
                 WindowInsets.CONSUMED
             }
 
             frameLayout.addView(baseView)
             setContentView(frameLayout)
         } else {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                baseView.setOnApplyWindowInsetsListener { view, insets ->
+                    Cocos2dxGLSurfaceView.onKeyboardInsets(insets)
+                    return@setOnApplyWindowInsetsListener view.onApplyWindowInsets(insets)
+                }
+            }
+
             setContentView(baseView)
         }
 
@@ -375,51 +389,71 @@ class GeometryDashActivity : AppCompatActivity(), Cocos2dxHelper.Cocos2dxHelperL
         return "$sourceDir!/lib/$architecture/"
     }
 
-    @SuppressLint("UnsafeDynamicallyLoadedCode")
     private fun loadGeodeLibrary() {
-        // Load Geode if exists
-        // bundling the object with the application allows for nicer backtraces
-        try {
-            // put libgeode.so in jniLibs/armeabi-v7a to get this
-            System.loadLibrary("geode")
-            return
-        } catch (e: UnsatisfiedLinkError) {
-            // but users may prefer it stored with data
-            val geodeFilename = LaunchUtils.geodeFilename
-            val geodePath = File(filesDir.path, "launcher/$geodeFilename")
-            if (geodePath.exists()) {
-                System.load(geodePath.path)
+        @Suppress("SENSELESS_COMPARISON")
+        if (BuildConfig.PREBUNDLED_GEODE != null) {
+            // attempt to load an externally provided Geode first
+            if (!loadExternalGeode()) {
+                copyGeodeResources()
+                System.loadLibrary("geode")
+            }
+        } else {
+            // Load Geode if exists
+            // bundling the object with the application allows for nicer backtraces
+            try {
+                // put libgeode.so in jniLibs/armeabi-v7a to get this
+                System.loadLibrary("geode")
                 return
-            }
-
-            // you know zmx i have 0 clue what this does so im
-            // just gonna like copy the binary from external
-            // also i get 20 million permission denied errors
-            val externalGeodePath = LaunchUtils.getInstalledGeodePath(this)!!
-
-            val copiedPath = File(filesDir.path, "copied")
-            if (copiedPath.exists()) {
-                copiedPath.deleteRecursively()
-            }
-            copiedPath.mkdir()
-
-            val copiedGeodePath = File(copiedPath.path, "Geode.so")
-
-            if (externalGeodePath.exists()) {
-                DownloadUtils.copyFile(
-                    FileInputStream(externalGeodePath),
-                    FileOutputStream(copiedGeodePath)
-                )
-
-                if (copiedGeodePath.exists()) {
-                    println("Loading Geode from ${externalGeodePath.name}")
-                    System.load(copiedGeodePath.path)
-                    return
+            } catch (e: UnsatisfiedLinkError) {
+                if (!loadExternalGeode()) {
+                    throw e
                 }
             }
-
-            throw e
         }
+    }
+
+    @SuppressLint("UnsafeDynamicallyLoadedCode")
+    private fun loadExternalGeode(): Boolean {
+        // but users may prefer it stored with data
+        val geodeFilename = LaunchUtils.geodeFilename
+        val geodePath = File(filesDir.path, "launcher/$geodeFilename")
+        if (geodePath.exists()) {
+            println("Loading Geode from ${geodePath.path}")
+            System.load(geodePath.path)
+            return true
+        }
+
+        // you know zmx i have 0 clue what this does so im
+        // just gonna like copy the binary from external
+        // also i get 20 million permission denied errors
+        val externalGeodePath = LaunchUtils.getInstalledGeodePath(this)
+            ?: return false
+
+        val copiedPath = File(filesDir.path, "copied")
+        if (copiedPath.exists()) {
+            copiedPath.deleteRecursively()
+        }
+        copiedPath.mkdir()
+
+        val copiedGeodePath = File(copiedPath.path, "Geode.so")
+
+        if (externalGeodePath.exists()) {
+            DownloadUtils.copyFile(
+                FileInputStream(externalGeodePath),
+                FileOutputStream(copiedGeodePath)
+            )
+
+            if (copiedGeodePath.exists()) {
+                // android 17 fix
+                copiedGeodePath.setWritable(false)
+
+                println("Loading Geode from ${externalGeodePath.name}")
+                System.load(copiedGeodePath.path)
+                return true
+            }
+        }
+
+        return false
     }
 
     private fun createView(): FrameLayout {
@@ -469,6 +503,10 @@ class GeometryDashActivity : AppCompatActivity(), Cocos2dxHelper.Cocos2dxHelperL
 
         editText.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
         glSurfaceView.cocos2dxEditText = editText
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            glSurfaceView.defaultFocusHighlightEnabled = false
+        }
 
         return frameLayout
     }
@@ -652,6 +690,130 @@ class GeometryDashActivity : AppCompatActivity(), Cocos2dxHelper.Cocos2dxHelperL
                 DownloadUtils.copyFile(mod, modOutput.outputStream())
 
                 println("Copied internal mod $fileName")
+            }
+        }
+    }
+
+    private fun copyGeodeResources() {
+        @Suppress("SENSELESS_COMPARISON")
+        if (BuildConfig.PREBUNDLED_GEODE == null) {
+            return
+        }
+
+        val resourcesDirectory = LaunchUtils.getGeodeResourcesDirectory(this)
+
+        val pathBase = "geode.loader"
+        val versionFilename = "version"
+
+        val bundledVersion = try {
+            assets.open("$pathBase/$versionFilename").bufferedReader().use {
+                it.readText()
+            }.trimEnd()
+        } catch (_: IOException) {
+            return
+        }
+
+        val versionFile = File(resourcesDirectory, versionFilename)
+        val resourcesVersion = if (versionFile.exists()) {
+            versionFile.readText().trimEnd()
+        } else null
+
+        if (bundledVersion == resourcesVersion) {
+            println("copyGeodeResources: found $resourcesVersion, expected $bundledVersion. No work needs to be done!")
+            return
+        }
+
+        if (resourcesDirectory.exists()) {
+            resourcesDirectory.deleteRecursively()
+        }
+        resourcesDirectory.mkdirs()
+
+        println("copyGeodeResources: found $resourcesVersion, expected $bundledVersion. Copying assets")
+
+        val fileListing = try {
+            assets.list(pathBase)
+        } catch (_: IOException) {
+            return
+        }
+
+        fileListing?.forEach { fileName ->
+            val resourceOutput = File(resourcesDirectory, fileName)
+
+            val resource = assets.open("$pathBase/$fileName")
+            DownloadUtils.copyFile(resource, resourceOutput.outputStream())
+        }
+    }
+
+    class EGLConfigChooser : GLSurfaceView.EGLConfigChooser {
+        // this comes from EGL14, but is unavailable on EGL10
+        // also EGL14 is incompatible with EGL10. so whatever
+        private var EGL_OPENGL_ES2_BIT: Int = 0x04
+
+        private data class ConfigValues(
+            val redSize: Int,
+            val greenSize: Int,
+            val blueSize: Int,
+            val alphaSize: Int,
+            val depthSize: Int,
+            val stencilSize: Int,
+        )
+
+        private fun getAttribValue(egl: EGL10, display: EGLDisplay, config: EGLConfig, attrib: Int): Int {
+            val value = IntArray(1)
+            egl.eglGetConfigAttrib(display, config, attrib, value)
+
+            return value[0]
+        }
+
+        private fun testConfig(egl: EGL10, display: EGLDisplay, attrib: ConfigValues): EGLConfig? {
+            val attribList = intArrayOf(
+                EGL10.EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
+                EGL10.EGL_RED_SIZE, attrib.redSize,
+                EGL10.EGL_GREEN_SIZE, attrib.greenSize,
+                EGL10.EGL_BLUE_SIZE, attrib.blueSize,
+                EGL10.EGL_ALPHA_SIZE, attrib.alphaSize,
+                EGL10.EGL_DEPTH_SIZE, attrib.depthSize,
+                EGL10.EGL_STENCIL_SIZE, attrib.stencilSize,
+                EGL10.EGL_NONE
+            )
+
+            val configs = arrayOfNulls<EGLConfig>(1)
+            val numConfigs = IntArray(1)
+
+            val res = egl.eglChooseConfig(display, attribList, configs, configs.size, numConfigs)
+            if (res && numConfigs[0] > 0 && configs[0] != null) {
+                return configs[0]
+            }
+
+            return null
+        }
+
+        private fun printConfig(egl: EGL10, display: EGLDisplay, config: EGLConfig) {
+            val id = getAttribValue(egl, display, config, EGL10.EGL_CONFIG_ID)
+            val red = getAttribValue(egl, display, config, EGL10.EGL_RED_SIZE)
+            val green = getAttribValue(egl, display, config, EGL10.EGL_GREEN_SIZE)
+            val blue = getAttribValue(egl, display, config, EGL10.EGL_BLUE_SIZE)
+            val alpha = getAttribValue(egl, display, config, EGL10.EGL_ALPHA_SIZE)
+            val depth = getAttribValue(egl, display, config, EGL10.EGL_DEPTH_SIZE)
+            val stencil = getAttribValue(egl, display, config, EGL10.EGL_STENCIL_SIZE)
+            println("EGLConfig $id: (red = $red, green = $green, blue = $blue, alpha = $alpha, depth = $depth, stencil = $stencil)")
+        }
+
+        override fun chooseConfig(egl: EGL10, display: EGLDisplay): EGLConfig {
+            val configs = listOf(
+                ConfigValues(8, 8, 8, 8, 16, 8),
+                ConfigValues(8, 8, 8, 0, 16, 8),
+                ConfigValues(5, 6, 5, 0, 16, 8),
+                ConfigValues(0, 0, 0, 0, 0, 0),
+            )
+
+            return configs.firstNotNullOf {
+                val config = testConfig(egl, display, it)
+                if (config != null) {
+                    printConfig(egl, display, config)
+                }
+
+                config
             }
         }
     }
