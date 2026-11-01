@@ -33,7 +33,7 @@ jobs:
 
     - name: Build project
       run: |
-        ./gradlew app:assembleStandard${{ matrix.config.name }}
+        ./gradlew app:assemble
 
     - name: Build project (Google Play)
       if: ${{ matrix.config.flavor == 'googlePlay' }}
