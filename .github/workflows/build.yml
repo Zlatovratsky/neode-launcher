@@ -51,7 +51,7 @@ jobs:
       if: ${{ matrix.config.flavor == 'standard' }}
       run: |
         SHORT_SHA=${GITHUB_SHA::7}
-        APK_PATH=${{github.workspace}}/app/build/outputs/apk/standard/${{ matrix.config.lower }}/app-universal-${{ matrix.config.lower }}-unsigned.apk
+        APK_PATH=${{github.workspace}}/app/build/outputs/apk/${{ matrix.config.lower }}/app-universal-${{ matrix.config.lower }}-unsigned.apk
         OUT_PATH=${{github.workspace}}/geode-launcher-${{ matrix.config.lower }}-$SHORT_SHA.apk
         mv $APK_PATH $OUT_PATH
         echo "path=$OUT_PATH" >> $GITHUB_OUTPUT
@@ -61,7 +61,7 @@ jobs:
       if: ${{ matrix.config.flavor == 'standard' }}
       run: |
         SHORT_SHA=${GITHUB_SHA::7}
-        APK_PATH=${{github.workspace}}/app/build/outputs/apk/standard/${{ matrix.config.lower }}/app-armeabi-v7a-${{ matrix.config.lower }}-unsigned.apk
+        APK_PATH=${{github.workspace}}/app/build/outputs/apk/${{ matrix.config.lower }}/app-armeabi-v7a-${{ matrix.config.lower }}-unsigned.apk
         OUT_PATH=${{github.workspace}}/geode-launcher-${{ matrix.config.lower }}-android32-$SHORT_SHA.apk
         mv $APK_PATH $OUT_PATH
         echo "path=$OUT_PATH" >> $GITHUB_OUTPUT
