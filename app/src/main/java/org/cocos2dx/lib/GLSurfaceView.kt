@@ -13,14 +13,12 @@ import android.view.SurfaceView
 import java.lang.ref.WeakReference
 import kotlin.collections.ArrayList
 
-import javax.microedition.khronos.egl.EGL10
-import javax.microedition.khronos.egl.EGL11
-import javax.microedition.khronos.egl.EGLConfig
-import javax.microedition.khronos.egl.EGLContext
-import javax.microedition.khronos.egl.EGLDisplay
-import javax.microedition.khronos.egl.EGLSurface
-import javax.microedition.khronos.opengles.GL
-import javax.microedition.khronos.opengles.GL10
+import android.opengl.EGL14
+import android.opengl.EGLConfig
+import android.opengl.EGLContext
+import android.opengl.EGLDisplay
+import android.opengl.EGLExt
+import android.opengl.EGLSurface
 
 open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
 
@@ -133,10 +131,25 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
 
             mRenderer.onDrawFrame()
 
-            when (mEGLHelper.swap()) {
-                EGL10.EGL_SUCCESS -> mChoreographer.postFrameCallback(this)
-                else -> return
+                when (mEGLHelper.swap()) {
+                    EGL14.EGL_SUCCESS -> {}
+                    EGL14.EGL_CONTEXT_LOST -> {
+                        mEGLHelper.destroySurface()
+                        mEGLHelper.finish()
+                        
+                        mEGLHelper.start()
+                        synchronized(GLThreadManager) {
+                            mHasSurface = mEGLHelper.createSurface()
+                            if (mHasSurface) {
+                                mRenderer.onSurfaceCreated()
+                                mRenderer.onSurfaceChanged()
+                            }
+                        }
+                    }
+                    else -> throw IllegalStateException("Surface is bad")
+                }                
             }
+
         }
 
         public fun surfaceCreated() {
@@ -322,25 +335,25 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
             }
 
             fun start() {
-                mEGL = (EGLContext.getEGL() as EGL10)
                 
-                mEGLDisplay = mEGL.eglGetDisplay(EGL10.EGL_DEFAULT_DISPLAY)
-                if (mEGLDisplay == EGL10.EGL_NO_DISPLAY) {
-                    throw RuntimeException("")
+                mEGLDisplay = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)
+                if (mEGLDisplay == EGL14.EGL_NO_DISPLAY) {
+                    throw RuntimeException("eglGetDisplay failed")
                 }
 
-                val version = IntArray(2)
-                if (!mEGL.eglInitialize(mEGLDisplay, version)) {
-                    throw RuntimeException("")
+                val major = IntArray(1)
+                val minor = IntArray(1)
+                if (!mEGL.eglInitialize(mEGLDisplay, major, 0, minor, 0)) {
+                    throw RuntimeException("eglInitialize failed")
                 }
 
                 mEGLConfig = EGLConfigChooser.chooseConfig(mEGL, mEGLDisplay)
                 
-                val attrib_list = intArrayOf(0x3098, 2, EGL10.EGL_NONE) 
-                mEGLContext = mEGL.eglCreateContext(mEGLDisplay, mEGLConfig, EGL10.EGL_NO_CONTEXT, attrib_list)
+                val attrib_list = intArrayOf(0x3098, 2, EGL14.EGL_NONE) 
+                mEGLContext = EGL14.eglCreateContext(mEGLDisplay, mEGLConfig, EGL14.EGL_NO_CONTEXT, attrib_list, 0)
                 
-                if (mEGLContext == EGL10.EGL_NO_CONTEXT) {
-                    throw IllegalStateException("")
+                if (mEGLContext == EGL14.EGL_NO_CONTEXT) {
+                    throw IllegalStateException("eglCreateContext failed")
                 }
             }
 
@@ -348,48 +361,47 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
 
                 val view = mGLSurfaceViewWeakRef.get()
                 if (view != null) {
-                    mEGLSurface = mEGL.eglCreateWindowSurface(mEGLDisplay, mEGLConfig, view.getHolder(), null)
+                    mEGLSurface = EGL14.eglCreateWindowSurface(mEGLDisplay, mEGLConfig, view.getHolder(), null, 0)
                 }
 
-                if (mEGLSurface == EGL10.EGL_NO_SURFACE) {
+                if (mEGLSurface == EGL14.EGL_NO_SURFACE) {
                     return false
                 }
 
-                if (!mEGL.eglMakeCurrent(mEGLDisplay, mEGLSurface, mEGLSurface, mEGLContext)) {
+                if (!EGL14.eglMakeCurrent(mEGLDisplay, mEGLSurface, mEGLSurface, mEGLContext)) {
                     return false
                 }
-
+                
+                EGL14.eglSwapInterval(0)
                 return true
             }
 
             fun swap() : Int {
-                if (!mEGL.eglSwapBuffers(mEGLDisplay, mEGLSurface)) {
-                    return mEGL.eglGetError()
+                if (!EGL14.eglSwapBuffers(mEGLDisplay, mEGLSurface)) {
+                    return EGL14.eglGetError()
                 }
-                return EGL10.EGL_SUCCESS
+                return EGL14.EGL_SUCCESS
             }
 
             fun destroySurface() {
-                mEGL.eglMakeCurrent(mEGLDisplay, EGL10.EGL_NO_SURFACE, EGL10.EGL_NO_SURFACE, EGL10.EGL_NO_CONTEXT)
+                EGL14.eglMakeCurrent(mEGLDisplay, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT)
                     
-                mEGL.eglDestroySurface(mEGLDisplay, mEGLSurface)
+                EGL14.eglDestroySurface(mEGLDisplay, mEGLSurface)
             }
 
             fun finish() {
-                if (!mEGL.eglDestroyContext(mEGLDisplay, mEGLContext)) {
+                if (!EGL14.eglDestroyContext(mEGLDisplay, mEGLContext)) {
                     throw RuntimeException()
                 }
                 
-                mEGL.eglTerminate(mEGLDisplay);
+                EGL14.eglTerminate(mEGLDisplay);
             }
 
             lateinit var mGLSurfaceViewWeakRef: WeakReference<GLSurfaceView>
-            lateinit var mEGL: EGL10
             lateinit var mEGLDisplay: EGLDisplay
             lateinit var mEGLSurface: EGLSurface
             lateinit var mEGLConfig: EGLConfig
             lateinit var mEGLContext: EGLContext
-            lateinit var mGL: GL10
 
 
             private object EGLConfigChooser {
@@ -406,28 +418,28 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
                     val stencilSize: Int,
                 )
                 
-                private fun getAttribValue(egl: EGL10, display: EGLDisplay, config: EGLConfig, attrib: Int): Int {
+                private fun getAttribValue(display: EGLDisplay, config: EGLConfig, attrib: Int): Int {
                     val value = IntArray(1)
-                    egl.eglGetConfigAttrib(display, config, attrib, value)
+                    EGL14.eglGetConfigAttrib(display, config, attrib, value, 0)
                     return value[0]
                 }
                 
-                private fun testConfig(egl: EGL10, display: EGLDisplay, attrib: ConfigValues): EGLConfig? {
+                private fun testConfig(display: EGLDisplay, attrib: ConfigValues): EGLConfig? {
                     val attribList = intArrayOf(
-                        EGL10.EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
-                        EGL10.EGL_RED_SIZE, attrib.redSize,
-                        EGL10.EGL_GREEN_SIZE, attrib.greenSize,
-                        EGL10.EGL_BLUE_SIZE, attrib.blueSize,
-                        EGL10.EGL_ALPHA_SIZE, attrib.alphaSize,
-                        EGL10.EGL_DEPTH_SIZE, attrib.depthSize,
-                        EGL10.EGL_STENCIL_SIZE, attrib.stencilSize,
-                        EGL10.EGL_NONE
+                        EGL14.EGL_RENDERABLE_TYPE, EGL14.EGL_OPENGL_ES2_BIT,
+                        EGL14.EGL_RED_SIZE, attrib.redSize,
+                        EGL14.EGL_GREEN_SIZE, attrib.greenSize,
+                        EGL14.EGL_BLUE_SIZE, attrib.blueSize,
+                        EGL14.EGL_ALPHA_SIZE, attrib.alphaSize,
+                        EGL14.EGL_DEPTH_SIZE, attrib.depthSize,
+                        EGL14.EGL_STENCIL_SIZE, attrib.stencilSize,
+                        EGL14.EGL_NONE
                     )
 
                     val configs = arrayOfNulls<EGLConfig>(1)
                     val numConfigs = IntArray(1)
 
-                    val res = egl.eglChooseConfig(display, attribList, configs, configs.size, numConfigs)
+                    val res = EGL14.eglChooseConfig(display, attribList, 0, configs, 0, configs.size, numConfigs, 0)
                     if (res && numConfigs[0] > 0 && configs[0] != null) {
                         return configs[0]
                     }
@@ -435,18 +447,18 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
                     return null
                 }
 
-                private fun printConfig(egl: EGL10, display: EGLDisplay, config: EGLConfig) {
-                    val id = getAttribValue(egl, display, config, EGL10.EGL_CONFIG_ID)
-                    val red = getAttribValue(egl, display, config, EGL10.EGL_RED_SIZE)
-                    val green = getAttribValue(egl, display, config, EGL10.EGL_GREEN_SIZE)
-                    val blue = getAttribValue(egl, display, config, EGL10.EGL_BLUE_SIZE)
-                    val alpha = getAttribValue(egl, display, config, EGL10.EGL_ALPHA_SIZE)
-                    val depth = getAttribValue(egl, display, config, EGL10.EGL_DEPTH_SIZE)
-                    val stencil = getAttribValue(egl, display, config, EGL10.EGL_STENCIL_SIZE)
+                private fun printConfig(display: EGLDisplay, config: EGLConfig) {
+                    val id = getAttribValue(display, config, EGL14.EGL_CONFIG_ID)
+                    val red = getAttribValue(display, config, EGL14.EGL_RED_SIZE)
+                    val green = getAttribValue(display, config, EGL14.EGL_GREEN_SIZE)
+                    val blue = getAttribValue(display, config, EGL14.EGL_BLUE_SIZE)
+                    val alpha = getAttribValue(display, config, EGL14.EGL_ALPHA_SIZE)
+                    val depth = getAttribValue(display, config, EGL14.EGL_DEPTH_SIZE)
+                    val stencil = getAttribValue(display, config, EGL14.EGL_STENCIL_SIZE)
                     println("EGLConfig $id: (red = $red, green = $green, blue = $blue, alpha = $alpha, depth = $depth, stencil = $stencil)")
                 }
 
-                fun chooseConfig(egl: EGL10, display: EGLDisplay): EGLConfig {
+                fun chooseConfig(display: EGLDisplay): EGLConfig {
                     val configs = listOf(
                         ConfigValues(8, 8, 8, 8, 16, 8),
                         ConfigValues(8, 8, 8, 0, 16, 8),

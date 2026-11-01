@@ -28,21 +28,23 @@ jobs:
         distribution: temurin
         cache: gradle
 
-    - name: Generate keystore file
-      run: echo ${{secrets.KEYSTORE_FILE}} | base64 -d > ~/release.keystore
-
     - name: Fix gradle permissions
       run: chmod +x ./gradlew
 
     - name: Build project
       run: |
-        ./gradlew app:assemble
+        ./gradlew app:assembleStandard
+
+    - name: Build project (Google Play)
+      if: ${{ matrix.config.flavor == 'googlePlay' }}
+      run: |
+        ./gradlew app:bundleGooglePlayRelease -PdisableAbiSplits
 
     - name: Rename universal apk
       id: rename_apk_universal
       run: |
         SHORT_SHA=${GITHUB_SHA::7}
-        APK_PATH=${{github.workspace}}/app/build/outputs/apk/${{ matrix.config.lower }}/app-universal-${{ matrix.config.lower }}.apk
+        APK_PATH=${{github.workspace}}/app/build/outputs/apk/standard/${{ matrix.config.lower }}/app-standard-universal-${{ matrix.config.lower }}-unsigned.apk
         OUT_PATH=${{github.workspace}}/geode-launcher-${{ matrix.config.lower }}-$SHORT_SHA.apk
         mv $APK_PATH $OUT_PATH
         echo "path=$OUT_PATH" >> $GITHUB_OUTPUT
@@ -51,7 +53,7 @@ jobs:
       id: rename_apk
       run: |
         SHORT_SHA=${GITHUB_SHA::7}
-        APK_PATH=${{github.workspace}}/app/build/outputs/apk/${{ matrix.config.lower }}/app-armeabi-v7a-${{ matrix.config.lower }}.apk
+        APK_PATH=${{github.workspace}}/app/build/outputs/apk/standard/${{ matrix.config.lower }}/app-standard-armeabi-v7a-${{ matrix.config.lower }}-unsigned.apk
         OUT_PATH=${{github.workspace}}/geode-launcher-${{ matrix.config.lower }}-android32-$SHORT_SHA.apk
         mv $APK_PATH $OUT_PATH
         echo "path=$OUT_PATH" >> $GITHUB_OUTPUT
