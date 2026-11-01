@@ -128,10 +128,11 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2, Choreographer.F
         }
 
         public fun drawFrame() : Unit {
-            mHandler.post {
-                if (!mHasSurface || mPaused || mExited) {
-                    return
-                }                
+            if (!mHasSurface || mPaused || mExited) {
+                return
+            }             
+            
+            mHandler.post {   
                 mRenderer.onDrawFrame()
 
                 when (mEGLHelper.swap()) {
