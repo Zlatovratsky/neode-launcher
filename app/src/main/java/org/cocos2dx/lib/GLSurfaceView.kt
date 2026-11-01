@@ -20,7 +20,7 @@ import android.opengl.EGLDisplay
 import android.opengl.EGLExt
 import android.opengl.EGLSurface
 
-open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2, Choreographer.FrameCallback {
+open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2{
 
     constructor(context: Context) : super(context) {
         val holder = getHolder()
@@ -38,11 +38,9 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2, Choreographer.F
 
     override fun surfaceCreated(holder: SurfaceHolder) {
         mGLThread.surfaceCreated()
-        mChoreographer.postFrameCallback(this)
     }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
-        mChoreographer.removeFrameCallback(this)
         mGLThread.surfaceDestroyed()
     }
 
@@ -87,11 +85,6 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2, Choreographer.F
         super.onDetachedFromWindow()    
     }
 
-    override fun doFrame(frameTimeInNanos: Long) {
-        mGLThread.drawFrame()
-        mChoreographer.postFrameCallback(this)
-    }
-
     interface Renderer {
         fun onSurfaceCreated()
 
@@ -104,7 +97,6 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2, Choreographer.F
         fun handleOnResume()
     }
     
-    private val mChoreographer: Choreographer = Choreographer.getInstance()
     private lateinit var mRenderer: Renderer
     private lateinit var mGLThread: GLThread
     private val mThisWeakRef = WeakReference<GLSurfaceView>(this)
@@ -112,7 +104,7 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2, Choreographer.F
     private var mDetached: Boolean = false
     private var mHasRenderer: Boolean = false
 
-    private class GLThread : HandlerThread {
+    private class GLThread : HandlerThread, Choreographer.FrameCallback {
 
         constructor(glSurfaceViewWeakRef: WeakReference<GLSurfaceView>, renderer: Renderer) : super("GLThread", Process.THREAD_PRIORITY_URGENT_DISPLAY*2) {
             mRenderer = renderer
@@ -122,13 +114,15 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2, Choreographer.F
 
         override protected fun onLooperPrepared() {
             mHandler = Handler.createAsync(getLooper())
+            mChoreographer = Choreographer.getInstance()
             try {
                 mEGLHelper.start()
             } finally {}
             mExited = false
         }
 
-        public fun drawFrame() : Unit {
+        override public fun doFrame(frameTimeInNanos: Long) {
+            mChoreographer.postFrameCallback(this)
             if (!mHasSurface || mPaused || mExited) {
                 return
             }             
@@ -165,6 +159,7 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2, Choreographer.F
                         if (mHasSurface) {
                             mRenderer.onSurfaceCreated()
                             mRenderer.onSurfaceChanged()
+                            mChoreographer.postFrameCallback(this)
                         }
                         (GLThreadManager as java.lang.Object).notifyAll()
                     }
@@ -184,6 +179,7 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2, Choreographer.F
             synchronized(GLThreadManager) {
                 if (mHasSurface && mHandler.post {
                     synchronized(GLThreadManager) {
+                        mChoreographer.removeFrameCallback(this)
                         mEGLHelper.destroySurface()
                         mHasSurface = false
                         (GLThreadManager as java.lang.Object).notifyAll()
@@ -263,6 +259,7 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2, Choreographer.F
             synchronized(GLThreadManager) {    
                 if (!mExited && mHandler.post {
                     synchronized(GLThreadManager) {
+                        mChoreographer.removeFrameCallback(this)
                         if (!mPaused) {
                             mRenderer.handleOnPause();
                             mPaused = true;
@@ -296,7 +293,8 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2, Choreographer.F
         private var mPaused = true
         private var mSizeChanged = false
         private var mExited = true
-        
+
+        private lateinit var mChoreographer: Choreographer
         private lateinit var mHandler: Handler
         private lateinit var mGLSurfaceViewWeakRef: WeakReference<GLSurfaceView>
         private val GLThreadManager = Any()
