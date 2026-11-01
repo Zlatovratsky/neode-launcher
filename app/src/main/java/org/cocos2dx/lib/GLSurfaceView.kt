@@ -124,19 +124,34 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
         }
 
         override public fun doFrame(frameTimeInNanos: Long) {
-            mEventQueue.processEvents()
+            mChoreographer.postFrameCallback(this)
 
             if (!mHasSurface || mPaused || mExited) {
-                mChoreographer.postFrameCallback(this)
                 return
             }
 
-            mRenderer.onDrawFrame()
+            mHandler.post {
+                mRenderer.onDrawFrame()
 
-            when (mEGLHelper.swap()) {
-                EGL10.EGL_SUCCESS -> mChoreographer.postFrameCallback(this)
-                else -> return
+                when (mEGLHelper.swap()) {
+                    EGL10.EGL_SUCCESS -> {}
+                    EGL11.EGL_CONTEXT_LOST -> {
+                        mEGLHelper.destroySurface()
+                        mEGLHelper.finish()
+                        
+                        mEGLHelper.start()
+                        synchronized(GLThreadManager) {
+                            mHasSurface = mEGLHelper.createSurface()
+                            if (mHasSurface) {
+                                mRenderer.onSurfaceCreated()
+                                mRenderer.onSurfaceChanged()
+                            }
+                        }
+                    }
+                    else -> throw IllegalStateException("Surface is bad")
+                }                
             }
+
         }
 
         public fun surfaceCreated() {
@@ -208,7 +223,7 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
         public fun onResume() {
             synchronized(GLThreadManager) {
                 if (mPaused) {
-                    mEventQueue.add {
+                    mHandler.post {
                         synchronized(GLThreadManager) {
                             mRenderer.handleOnResume()
                             mPaused = false
@@ -240,7 +255,7 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
         }
 
         public fun queueEvent(r: Runnable) {
-            mEventQueue.add(r)
+            mHandler.post(r)
         }
 
         public fun exit() {
@@ -286,35 +301,9 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
         private lateinit var mHandler: Handler
         private lateinit var mGLSurfaceViewWeakRef: WeakReference<GLSurfaceView>
         private val GLThreadManager = Any()
-        private val mEventQueue: EventQueue = EventQueue()
         private lateinit var mEGLHelper: EGLHelper
         private lateinit var mRenderer: Renderer
 
-        private class EventQueue {
-            private var front = ArrayList<Runnable>()
-            private var back = ArrayList<Runnable>()
-            private lateinit var buffer : ArrayList<Runnable>
-            private val lock = Any()
-
-            public fun add(r: Runnable) {
-                synchronized(lock) {
-                    front.add(r)
-                }
-            }
-
-            public fun processEvents() {
-                synchronized(lock) {
-                    buffer = front
-                    front = back
-                    back = buffer                    
-                }
-
-                for (i in 0 until back.size) {
-                    back[i].run()
-                }
-                back.clear()
-            }
-        }
 
         private class EGLHelper {
             constructor(glSurfaceViewWeakRef: WeakReference<GLSurfaceView>) {
@@ -465,7 +454,5 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
                 }
             }
         }
-    }
-
-    
+    }   
 }
