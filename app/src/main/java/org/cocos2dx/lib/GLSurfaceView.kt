@@ -121,7 +121,7 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
             mExited = false
         }
 
-        override public fun doFrame(frameTimeInNanos) {
+        override public fun doFrame(frameTimeInNanos: Long) {
             if (!mHasSurface || mPaused || mExited) {
                 mChoreographer.postFrameCallback(this)
                 return
