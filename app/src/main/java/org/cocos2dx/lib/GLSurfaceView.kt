@@ -20,6 +20,8 @@ import android.opengl.EGLDisplay
 import android.opengl.EGLExt
 import android.opengl.EGLSurface
 
+private const val DRAW_FRAME = 2
+
 open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
 
     constructor(context: Context) : super(context) {
@@ -305,7 +307,7 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
         }
 
 
-        private const val DRAW_FRAME = 2
+        
         private var mHasSurface = false
         private var mPaused = true
         private var mSizeChanged = false
