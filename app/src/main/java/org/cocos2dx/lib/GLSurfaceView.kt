@@ -291,15 +291,15 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
             }
         }
 
-        override fun handleMessage(msg: Message) {
+        override fun handleMessage(msg: Message) : Boolean {
             when (msg.what) {
                 DRAW_FRAME -> {
                     drawFrame()
-                    return
+                    return true
                 }
                 else -> {
                     msg.callback.run()
-                    return
+                    return true
                 }
             }
         }
