@@ -20,7 +20,9 @@ import android.opengl.EGLDisplay
 import android.opengl.EGLExt
 import android.opengl.EGLSurface
 
-open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2{
+private const val DRAW_FRAME = 2
+
+open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
 
     constructor(context: Context) : super(context) {
         val holder = getHolder()
@@ -104,7 +106,7 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2{
     private var mDetached: Boolean = false
     private var mHasRenderer: Boolean = false
 
-    private class GLThread : HandlerThread, Choreographer.FrameCallback {
+    private class GLThread : HandlerThread, Choreographer.FrameCallback, Handler.Callback {
 
         constructor(glSurfaceViewWeakRef: WeakReference<GLSurfaceView>, renderer: Renderer) : super("GLThread", Process.THREAD_PRIORITY_URGENT_DISPLAY*2) {
             mRenderer = renderer
@@ -113,7 +115,7 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2{
         }
 
         override protected fun onLooperPrepared() {
-            mHandler = Handler.createAsync(getLooper())
+            mHandler = Handler.createAsync(getLooper(), this)
             mChoreographer = Choreographer.getInstance()
             try {
                 mEGLHelper.start()
@@ -121,34 +123,36 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2{
             mExited = false
         }
 
-        override public fun doFrame(frameTimeInNanos: Long) { 
+        override public fun doFrame(frameTimeInNanos: Long) {
+            mHandler.sendEmptyMessage(DRAW_FRAME)
+        }
+
+        public fun drawFrame() {
             if (!mHasSurface || mPaused || mExited) {
                 mChoreographer.postFrameCallback(this)
                 return
             }             
             
-            mHandler.post {   
-                mRenderer.onDrawFrame()
+            mRenderer.onDrawFrame()
 
-                when (mEGLHelper.swap()) {
-                    EGL14.EGL_SUCCESS -> mChoreographer.postFrameCallback(this)
-                    EGL14.EGL_CONTEXT_LOST -> {
-                        mEGLHelper.destroySurface()
-                        mEGLHelper.finish()
+            when (mEGLHelper.swap()) {
+                EGL14.EGL_SUCCESS -> mChoreographer.postFrameCallback(this)
+                EGL14.EGL_CONTEXT_LOST -> {
+                    mEGLHelper.destroySurface()
+                    mEGLHelper.finish()
                         
-                        mEGLHelper.start()
-                        synchronized(GLThreadManager) {
-                            mHasSurface = mEGLHelper.createSurface()
-                            if (mHasSurface) {
-                                mRenderer.onSurfaceCreated()
-                                mRenderer.onSurfaceChanged()
-                            }
+                    mEGLHelper.start()
+                    synchronized(GLThreadManager) {
+                        mHasSurface = mEGLHelper.createSurface()
+                        if (mHasSurface) {
+                            mRenderer.onSurfaceCreated()
+                            mRenderer.onSurfaceChanged()
+                            mChoreographer.postFrameCallback(this)
                         }
                     }
-                    else -> throw IllegalStateException("Surface is bad")
-                }                
-            }
-
+                }
+                else -> throw IllegalStateException("Surface is bad")
+            }                
         }
 
         public fun surfaceCreated() {
@@ -182,6 +186,7 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2{
                         mChoreographer.removeFrameCallback(this)
                         mEGLHelper.destroySurface()
                         mHasSurface = false
+                        mChoreographer.removeFrameCallback(this)
                         (GLThreadManager as java.lang.Object).notifyAll()
                     }
                 }){
@@ -265,6 +270,7 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2{
                             mPaused = true;
                         }
                         if (mHasSurface) {
+                            mChoreographer.removeFrameCallback(this)
                             mEGLHelper.destroySurface();
                             mHasSurface = false;
                         }
@@ -289,11 +295,26 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2{
             }
         }
 
+        override fun handleMessage(msg: Message) : Boolean {
+            when (msg.what) {
+                DRAW_FRAME -> {
+                    drawFrame()
+                    return true
+                }
+                else -> {
+                    msg.callback.run()
+                    return true
+                }
+            }
+        }
+
+
+        
         private var mHasSurface = false
         private var mPaused = true
         private var mSizeChanged = false
         private var mExited = true
-
+        
         private lateinit var mChoreographer: Choreographer
         private lateinit var mHandler: Handler
         private lateinit var mGLSurfaceViewWeakRef: WeakReference<GLSurfaceView>
@@ -345,7 +366,7 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2{
                     return false
                 }
                 
-                EGL14.eglSwapInterval(mEGLDisplay, 0)
+                // EGL14.eglSwapInterval(mEGLDisplay, 0)
                 return true
             }
 
