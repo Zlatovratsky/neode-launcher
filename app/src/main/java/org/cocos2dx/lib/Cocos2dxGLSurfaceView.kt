@@ -162,7 +162,6 @@ class Cocos2dxGLSurfaceView(context: Context) : GLSurfaceView(context) {
     }
 
     fun initView() {
-        Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_DISPLAY)
 
         isFocusableInTouchMode = true
         cocos2dxGLSurfaceView = this
