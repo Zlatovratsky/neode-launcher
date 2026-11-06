@@ -108,7 +108,7 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
 
     private class GLThread : HandlerThread, Choreographer.FrameCallback, Handler.Callback {
 
-        constructor(glSurfaceViewWeakRef: WeakReference<GLSurfaceView>, renderer: Renderer) : super("GLThread", Process.THREAD_PRIORITY_URGENT_DISPLAY*2) {
+        constructor(glSurfaceViewWeakRef: WeakReference<GLSurfaceView>, renderer: Renderer) : super("GLThread", Process.THREAD_PRIORITY_DISPLAY) {
             mRenderer = renderer
             mGLSurfaceViewWeakRef = glSurfaceViewWeakRef
             mEGLHelper = EGLHelper(glSurfaceViewWeakRef)
