@@ -115,7 +115,7 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
         }
 
         override protected fun onLooperPrepared() {
-            mHandler = Handler.createAsync(getLooper(), this)
+            mHandler = Handler.createAsync(getLooper())
             mChoreographer = Choreographer.getInstance()
             try {
                 mEGLHelper.start()
