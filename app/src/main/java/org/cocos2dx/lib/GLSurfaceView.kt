@@ -106,7 +106,7 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
     private var mDetached: Boolean = false
     private var mHasRenderer: Boolean = false
 
-    private class GLThread : HandlerThread, Choreographer.FrameCallback, Handler.Callback {
+    private class GLThread : HandlerThread, Choreographer.FrameCallback{
 
         constructor(glSurfaceViewWeakRef: WeakReference<GLSurfaceView>, renderer: Renderer) : super("GLThread", Process.THREAD_PRIORITY_DISPLAY) {
             mRenderer = renderer
@@ -124,19 +124,19 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
         }
 
         override public fun doFrame(frameTimeInNanos: Long) {
-            mHandler.sendEmptyMessage(DRAW_FRAME)
+            drawFrame()
+            mChoreographer.postFrameCallback(this)
         }
 
         public fun drawFrame() {
             if (!mHasSurface || mPaused || mExited) {
-                mChoreographer.postFrameCallback(this)
                 return
             }             
             
             mRenderer.onDrawFrame()
 
             when (mEGLHelper.swap()) {
-                EGL14.EGL_SUCCESS -> mChoreographer.postFrameCallback(this)
+                EGL14.EGL_SUCCESS -> {}
                 EGL14.EGL_CONTEXT_LOST -> {
                     mEGLHelper.destroySurface()
                     mEGLHelper.finish()
@@ -147,7 +147,6 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
                         if (mHasSurface) {
                             mRenderer.onSurfaceCreated()
                             mRenderer.onSurfaceChanged()
-                            mChoreographer.postFrameCallback(this)
                         }
                     }
                 }
@@ -292,21 +291,6 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
                 } catch (e: InterruptedException) {}
             }
         }
-
-        override fun handleMessage(msg: Message) : Boolean {
-            when (msg.what) {
-                DRAW_FRAME -> {
-                    drawFrame()
-                    return true
-                }
-                else -> {
-                    msg.callback.run()
-                    return true
-                }
-            }
-        }
-
-
         
         private var mHasSurface = false
         private var mPaused = true
@@ -364,7 +348,7 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
                     return false
                 }
                 
-                // EGL14.eglSwapInterval(mEGLDisplay, 0)
+                EGL14.eglSwapInterval(mEGLDisplay, 0)
                 return true
             }
 
