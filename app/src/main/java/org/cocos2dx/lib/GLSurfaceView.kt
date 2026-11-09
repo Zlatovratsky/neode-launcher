@@ -135,7 +135,7 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
 
         public fun drawFrame() {
             if (!mHasSurface || mPaused || mExited) {
-                scheduleNextFrame(0, System.nanoTime())
+                scheduleNextFrame(0)
                 return
             }
             val frameStart = System.nanoTime()
@@ -197,7 +197,7 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
                         if (mHasSurface) {
                             mRenderer.onSurfaceCreated()
                             mRenderer.onSurfaceChanged()
-                            scheduleNextFrame(0, System.nanoTime())
+                            scheduleNextFrame(0)
                         }
                         (GLThreadManager as java.lang.Object).notifyAll()
                     }
