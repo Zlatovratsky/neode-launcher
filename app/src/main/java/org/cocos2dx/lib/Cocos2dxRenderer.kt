@@ -5,14 +5,13 @@ import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 
 private const val NANOSECONDS_PER_SECOND = 1000000000L
-private const val NANOSECONDS_PER_MICROSECOND = 1000000L
 
 @Suppress("unused", "KotlinJniMissingFunction")
 class Cocos2dxRenderer(private var handler: Cocos2dxGLSurfaceView) : GLSurfaceView.Renderer {
     companion object {
         @JvmStatic
         fun setAnimationInterval(@Suppress("UNUSED_PARAMETER") animationInterval: Double) {
-            // this function is useless for gd
+            mAnimationInterval = (animationInterval * NANOSECONDS_PER_SECONDS).toLong()
         }
 
         @JvmStatic
@@ -80,12 +79,11 @@ class Cocos2dxRenderer(private var handler: Cocos2dxGLSurfaceView) : GLSurfaceVi
         private external fun nativeInit(width: Int, height: Int)
     }
 
-    private var lastTickInNanoSeconds: Long = 0
     private var screenWidth = 0
     private var screenHeight = 0
     var sendResizeEvents = false
     var setFrameRate = false
-    private var mAnimationInterval: Long? = null
+    public var mAnimationInterval: Long? = null
 
     fun limitFrameRate(rate: Int) {
         mAnimationInterval = NANOSECONDS_PER_SECOND/rate
@@ -98,7 +96,6 @@ class Cocos2dxRenderer(private var handler: Cocos2dxGLSurfaceView) : GLSurfaceVi
 
     override fun onSurfaceCreated() {
         nativeInit(screenWidth, screenHeight)
-        lastTickInNanoSeconds = System.nanoTime()
     }
 
     override fun onSurfaceChanged() {

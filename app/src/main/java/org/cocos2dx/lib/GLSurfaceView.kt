@@ -21,6 +21,9 @@ import android.opengl.EGLExt
 import android.opengl.EGLSurface
 
 private const val DRAW_FRAME = 2
+private const val SCHEDULE_NEXT_FRAME = 3
+
+private const val NANOSECONDS_PER_MILLISECONDS = 1000000L
 
 open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
 
@@ -97,6 +100,8 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
         fun handleOnPause()
 
         fun handleOnResume()
+
+        public var mAnimationInterval: Long?
     }
     
     private lateinit var mRenderer: Renderer
@@ -106,7 +111,7 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
     private var mDetached: Boolean = false
     private var mHasRenderer: Boolean = false
 
-    private class GLThread : HandlerThread, Choreographer.FrameCallback{
+    private class GLThread : HandlerThread, Choreographer.FrameCallback, Handler.Callback {
 
         constructor(glSurfaceViewWeakRef: WeakReference<GLSurfaceView>, renderer: Renderer) : super("GLThread", Process.THREAD_PRIORITY_DISPLAY) {
             mRenderer = renderer
@@ -115,7 +120,7 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
         }
 
         override protected fun onLooperPrepared() {
-            mHandler = Handler.createAsync(getLooper())
+            mHandler = Handler.createAsync(getLooper(), this)
             mChoreographer = Choreographer.getInstance()
             try {
                 mEGLHelper.start()
@@ -124,19 +129,23 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
         }
 
         override public fun doFrame(frameTimeInNanos: Long) {
-            drawFrame()
-            mChoreographer.postFrameCallback(this)
+            mHandler.sendEmptyMessage(DRAW_FRAME)
         }
 
         public fun drawFrame() {
             if (!mHasSurface || mPaused || mExited) {
+                scheduleNextFrame(0, System.nanoTime())
                 return
-            }             
-            
+            }
+            val frameStart = System.nanoTime()
             mRenderer.onDrawFrame()
 
             when (mEGLHelper.swap()) {
-                EGL14.EGL_SUCCESS -> {}
+                EGL14.EGL_SUCCESS -> {
+                    val now = System.nanoTime()
+                    val frameTime = now - frameStart
+                    scheduleNextFrame(frameTime, now)                    
+                }
                 EGL14.EGL_CONTEXT_LOST -> {
                     mEGLHelper.destroySurface()
                     mEGLHelper.finish()
@@ -147,11 +156,38 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
                         if (mHasSurface) {
                             mRenderer.onSurfaceCreated()
                             mRenderer.onSurfaceChanged()
+                            
+                            val now = System.nanoTime()
+                            val frameTime = now - frameStart
+                            scheduleNextFrame(frameTime, now) 
                         }
                     }
                 }
                 else -> throw IllegalStateException("Surface is bad")
             }                
+        }
+
+        fun scheduleNextFrame(frameIntervalInNanos: Long, nowInNanos: Long) {
+            if (mRenderer.mAnimationInterval == null) {
+                mChoreographer.postFrameCallback(this)
+            } else {
+                val animationIntervalInNanos = mRenderer.mAnimationInterval            
+                extraDelta += frameIntervalInNanos % animationIntervalInNanos
+
+                frameInterval = (animationIntervalInNanos / NANOSECONDS_PER_MILLISECONDS) + (extraDelta / NANOSECONDS_PER_MILLISECONDS)
+                extraDelta %= animationIntervalInNanos
+                
+                val delay = frameInterval - (extraDelta / NANOSECONDS_PER_MILLISECONDS)
+                val now = nowInNanos / NANOSECONDS_PER_MILLISECONDS
+                
+                mHandler.sendEmptyMessageAtTime(SCHEDULE_NEXT_FRAME, now + delay)
+            }
+        }
+
+        fun unscheduleNextFrame() {
+            mChoreographer.removeFrameCallback(this)
+            mHandler.removeMessages(SCHEDULE_NEXT_FRAME)
+            mHandler.removeMessages(DRAW_FRAME)
         }
 
         public fun surfaceCreated() {
@@ -162,7 +198,7 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
                         if (mHasSurface) {
                             mRenderer.onSurfaceCreated()
                             mRenderer.onSurfaceChanged()
-                            mChoreographer.postFrameCallback(this)
+                            scheduleNextFrame(0, System.nanoTime())
                         }
                         (GLThreadManager as java.lang.Object).notifyAll()
                     }
@@ -182,9 +218,9 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
             synchronized(GLThreadManager) {
                 if (mHasSurface && mHandler.post {
                     synchronized(GLThreadManager) {
+                        unscheduleNextFrame()
                         mEGLHelper.destroySurface()
                         mHasSurface = false
-                        mChoreographer.removeFrameCallback(this)
                         (GLThreadManager as java.lang.Object).notifyAll()
                     }
                 }){
@@ -267,7 +303,7 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
                             mPaused = true;
                         }
                         if (mHasSurface) {
-                            mChoreographer.removeFrameCallback(this)
+                            unscheduleNextFrame()
                             mEGLHelper.destroySurface();
                             mHasSurface = false;
                         }
@@ -291,7 +327,27 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
                 } catch (e: InterruptedException) {}
             }
         }
-        
+
+        override fun handleMessage(msg: Message) : Boolean {
+            when (msg.what) {
+                DRAW_FRAME -> {
+                    drawFrame()
+                    return true
+                }
+                SCHEDULE_NEXT_FRAME -> {
+                    mHandler.sendEmptyMessage(DRAW_FRAME)
+                    return true
+                }
+                else -> {
+                    msg.callback.run()
+                    return true
+                }
+            }
+        }
+
+
+        private var extraDelta: Long = 0
+
         private var mHasSurface = false
         private var mPaused = true
         private var mSizeChanged = false

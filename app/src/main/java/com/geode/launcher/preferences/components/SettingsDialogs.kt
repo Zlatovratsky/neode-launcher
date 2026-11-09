@@ -171,7 +171,7 @@ fun FrameRateDialog(
 ) {
     var enteredValue by remember {
         mutableStateOf(
-            if (initialValue == 0) maxFrameRate.toString()
+            if (initialValue == 0) null
             else initialValue.toString()
         )
     }
@@ -269,12 +269,7 @@ fun FrameRateDialog(
         confirmButton = {
             TextButton(
                 onClick = {
-                    // automatically disable if already max
-                    if (currentValue == maxFrameRate) {
-                        onSelect(0)
-                    } else {
-                        onSelect(currentValue ?: 0)
-                    }
+                    onSelect(currentValue ?: 0)
                 },
                 enabled = !minimumReached && !maximumReached && currentValue != null
             ) {

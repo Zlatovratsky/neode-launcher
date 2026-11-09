@@ -162,7 +162,6 @@ class Cocos2dxGLSurfaceView(context: Context) : GLSurfaceView(context) {
     }
 
     fun initView() {
-
         isFocusableInTouchMode = true
         cocos2dxGLSurfaceView = this
         cocos2dxTextInputWrapper = Cocos2dxTextInputWrapper(this)
