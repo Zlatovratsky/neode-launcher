@@ -21,7 +21,7 @@ class Cocos2dxRenderer(private var handler: Cocos2dxGLSurfaceView) : GLSurfaceVi
 
         @JvmStatic
         fun setAnimationInterval(@Suppress("UNUSED_PARAMETER") animationInterval: Double) {
-            instance.mAnimationInterval = (animationInterval * NANOSECONDS_PER_SECOND).toLong()
+            // instance.mAnimationInterval = (animationInterval * NANOSECONDS_PER_SECOND).toLong()
         }
 
         @JvmStatic
