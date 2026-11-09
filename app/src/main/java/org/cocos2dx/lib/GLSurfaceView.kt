@@ -6,6 +6,7 @@ import android.os.HandlerThread
 import android.os.Looper
 import android.os.Message
 import android.os.Process
+import android.os.SystemClock
 import android.view.Choreographer
 import android.view.SurfaceHolder
 import android.view.SurfaceView
@@ -144,7 +145,7 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
                 EGL14.EGL_SUCCESS -> {
                     val now = System.nanoTime()
                     val frameTime = now - frameStart
-                    scheduleNextFrame(frameTime, now)                    
+                    scheduleNextFrame(frameTime)                    
                 }
                 EGL14.EGL_CONTEXT_LOST -> {
                     mEGLHelper.destroySurface()
@@ -159,7 +160,7 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
                             
                             val now = System.nanoTime()
                             val frameTime = now - frameStart
-                            scheduleNextFrame(frameTime, now) 
+                            scheduleNextFrame(frameTime) 
                         }
                     }
                 }
@@ -167,18 +168,16 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
             }                
         }
 
-        fun scheduleNextFrame(frameIntervalInNanos: Long, nowInNanos: Long) {
+        fun scheduleNextFrame(frameIntervalInNanos: Long) {
             val animationIntervalInNanos = mRenderer.mAnimationInterval
-            if (animationIntervalInNanos != null) {            
-                extraDelta += frameIntervalInNanos % animationIntervalInNanos
+            if (animationIntervalInNanos != null) {
+                val modifiedFrameTimeInNanos = (frameIntervalInNanos % animationIntervalInNanos)  
+                extraDelta += animationIntervalInNanos % NANOSECONDS_PER_MILLISECONDS
 
-                val frameInterval = (animationIntervalInNanos / NANOSECONDS_PER_MILLISECONDS) + (extraDelta / NANOSECONDS_PER_MILLISECONDS)
-                extraDelta %= animationIntervalInNanos
+                val delay = (animationIntervalInNanos / NANOSECONDS_PER_MILLISECONDS) - (modifiedFrameTimeInNanos / NANOSECONDS_PER_MILLISECONDS) + (extraDelta / NANOSECONDS_PER_MILLISECONDS)
+                extraDelta %= NANOSECONDS_PER_MILLISECONDS
                 
-                val delay = frameInterval - (extraDelta / NANOSECONDS_PER_MILLISECONDS)
-                val now = nowInNanos / NANOSECONDS_PER_MILLISECONDS
-                
-                mHandler.sendEmptyMessageAtTime(SCHEDULE_NEXT_FRAME, now + delay)
+                mHandler.sendEmptyMessageDelayed(SCHEDULE_NEXT_FRAME, delay)
             } else {
                 mChoreographer.postFrameCallback(this)
             }

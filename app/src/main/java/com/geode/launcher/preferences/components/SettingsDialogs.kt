@@ -175,7 +175,7 @@ fun FrameRateDialog(
         )
     }
 
-    val minFrameRate = 5
+    val minFrameRate = 0
     val currentValue = enteredValue.toIntOrNull()
     val maximumReached = currentValue != null && currentValue > maxFrameRate
     val minimumReached = currentValue != null && currentValue < minFrameRate
