@@ -13,15 +13,15 @@ class Cocos2dxRenderer(private var handler: Cocos2dxGLSurfaceView) : GLSurfaceVi
     }
     
     companion object {
-        private var instance: cocos2dxRenderer = null
+        private var instance: Cocos2dxRenderer = null
 
-        fun initRenderer(renderer: cocos2dxRenderer) {
+        fun initRenderer(renderer: Cocos2dxRenderer) {
             instance = renderer
         }
 
         @JvmStatic
         fun setAnimationInterval(@Suppress("UNUSED_PARAMETER") animationInterval: Double) {
-            mAnimationInterval = (animationInterval * NANOSECONDS_PER_SECOND).toLong()
+            instance.mAnimationInterval = (animationInterval * NANOSECONDS_PER_SECOND).toLong()
         }
 
         @JvmStatic
