@@ -193,6 +193,7 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
                             mRenderer.onSurfaceCreated()
                             mRenderer.onSurfaceChanged()
                             scheduleNextFrame(0)
+                            mChoreographer.postFrameCallback(this)
                         }
                         (GLThreadManager as java.lang.Object).notifyAll()
                     }
@@ -212,6 +213,7 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
             synchronized(GLThreadManager) {
                 if (mHasSurface && mHandler.post {
                     synchronized(GLThreadManager) {
+                        mChoreographer.removeFrameCallback(this)
                         unscheduleNextFrame()
                         mEGLHelper.destroySurface()
                         mHasSurface = false
@@ -297,6 +299,7 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
                             mPaused = true;
                         }
                         if (mHasSurface) {
+                            mChoreographer.removeFrameCallback(this)
                             unscheduleNextFrame()
                             mEGLHelper.destroySurface();
                             mHasSurface = false;
