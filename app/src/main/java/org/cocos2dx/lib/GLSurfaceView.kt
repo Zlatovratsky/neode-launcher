@@ -168,7 +168,7 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
         }
 
         fun scheduleNextFrame(frameIntervalInNanos: Long, nowInNanos: Long) {
-            if (mRenderer.mAnimationInterval == null) {
+            if (mRenderer.mAnimationInterval != null) {
                 val animationIntervalInNanos = mRenderer!!.mAnimationInterval            
                 extraDelta += frameIntervalInNanos % animationIntervalInNanos
 

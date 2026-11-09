@@ -8,7 +8,22 @@ private const val NANOSECONDS_PER_SECOND = 1000000000L
 
 @Suppress("unused", "KotlinJniMissingFunction")
 class Cocos2dxRenderer(private var handler: Cocos2dxGLSurfaceView) : GLSurfaceView.Renderer {
+    init {
+        initRenderer(this)
+    }
+    
     companion object {
+        private var instance: cocos2dxRenderer = null
+
+        fun initRenderer(renderer: cocos2dxRenderer) {
+            instance = renderer
+        }
+
+        @JvmStatic
+        fun setAnimationInterval(@Suppress("UNUSED_PARAMETER") animationInterval: Double) {
+            mAnimationInterval = (animationInterval * NANOSECONDS_PER_SECOND).toLong()
+        }
+
         @JvmStatic
         private external fun nativeDeleteBackward()
 
@@ -72,11 +87,6 @@ class Cocos2dxRenderer(private var handler: Cocos2dxGLSurfaceView) : GLSurfaceVi
 
         @JvmStatic
         private external fun nativeInit(width: Int, height: Int)
-    }
-
-    @JvmStatic
-    fun setAnimationInterval(@Suppress("UNUSED_PARAMETER") animationInterval: Double) {
-        mAnimationInterval = (animationInterval * NANOSECONDS_PER_SECOND).toLong()
     }
 
     private var screenWidth = 0
