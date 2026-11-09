@@ -169,13 +169,9 @@ fun FrameRateDialog(
     initialValue: Int,
     maxFrameRate: Int,
 ) {
-    var enteredValue by remember {
-        mutableStateOf(
-            initialValue.toString()
-        )
-    }
+    var enteredValue = initialValue.toString()
 
-    val minFrameRate = 0
+    val minFrameRate = 5
     val currentValue = enteredValue.toIntOrNull()
     val maximumReached = currentValue != null && currentValue > maxFrameRate
     val minimumReached = currentValue != null && currentValue < minFrameRate
