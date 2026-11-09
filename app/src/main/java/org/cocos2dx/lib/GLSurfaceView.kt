@@ -22,7 +22,7 @@ import android.opengl.EGLExt
 import android.opengl.EGLSurface
 
 private const val DRAW_FRAME = 2
-private const val SCHEDULE_NEXT_FRAME = 3
+private const val SWAP_BUFFERS = 3
 
 private const val NANOSECONDS_PER_MILLISECONDS = 1000000L
 
@@ -130,7 +130,7 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
         }
 
         override public fun doFrame(frameTimeInNanos: Long) {
-            mHandler.sendEmptyMessage(DRAW_FRAME)
+            mHandler.sendEmptyMessage(SWAP_BUFFERS)
         }
 
         public fun drawFrame() {
@@ -140,12 +140,14 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
             }
             val frameStart = System.nanoTime()
             mRenderer.onDrawFrame()
+            val now = System.nanoTime()
+            val frameTime = now - frameStart
+            scheduleNextFrame(frameTime)
+        }
 
+        protected fun swap() {
             when (mEGLHelper.swap()) {
-                EGL14.EGL_SUCCESS -> {
-                    val now = System.nanoTime()
-                    val frameTime = now - frameStart
-                    scheduleNextFrame(frameTime)                    
+                EGL14.EGL_SUCCESS -> {  
                 }
                 EGL14.EGL_CONTEXT_LOST -> {
                     mEGLHelper.destroySurface()
@@ -157,10 +159,6 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
                         if (mHasSurface) {
                             mRenderer.onSurfaceCreated()
                             mRenderer.onSurfaceChanged()
-                            
-                            val now = System.nanoTime()
-                            val frameTime = now - frameStart
-                            scheduleNextFrame(frameTime) 
                         }
                     }
                 }
@@ -177,13 +175,12 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
                 val delay = (animationIntervalInNanos / NANOSECONDS_PER_MILLISECONDS) - (modifiedFrameTimeInNanos / NANOSECONDS_PER_MILLISECONDS) + (extraDelta / NANOSECONDS_PER_MILLISECONDS)
                 extraDelta %= NANOSECONDS_PER_MILLISECONDS
                 
-                mHandler.sendEmptyMessageDelayed(SCHEDULE_NEXT_FRAME, delay)
-            } else {
+                mHandler.sendEmptyMessageDelayed(DRAW_FRAME, delay)
             }
         }
 
         fun unscheduleNextFrame() {
-            mHandler.removeMessages(SCHEDULE_NEXT_FRAME)
+            mHandler.removeMessages(SWAP_BUFFERS)
             mHandler.removeMessages(DRAW_FRAME)
         }
 
@@ -331,8 +328,8 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
                     drawFrame()
                     return true
                 }
-                SCHEDULE_NEXT_FRAME -> {
-                    mHandler.sendEmptyMessage(DRAW_FRAME)
+                SWAP_BUFFERS -> {
+                    swap()
                     return true
                 }
                 else -> {
@@ -356,7 +353,6 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
         private val GLThreadManager = Any()
         private lateinit var mEGLHelper: EGLHelper
         private lateinit var mRenderer: Renderer
-
 
         private class EGLHelper {
             constructor(glSurfaceViewWeakRef: WeakReference<GLSurfaceView>) {
