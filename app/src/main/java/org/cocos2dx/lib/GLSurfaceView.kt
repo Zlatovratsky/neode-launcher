@@ -147,8 +147,7 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
 
         protected fun swap() {
             when (mEGLHelper.swap()) {
-                EGL14.EGL_SUCCESS -> {  
-                }
+                EGL14.EGL_SUCCESS -> mChoreographer.postFrameCallback(this)
                 EGL14.EGL_CONTEXT_LOST -> {
                     mEGLHelper.destroySurface()
                     mEGLHelper.finish()
@@ -159,6 +158,7 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
                         if (mHasSurface) {
                             mRenderer.onSurfaceCreated()
                             mRenderer.onSurfaceChanged()
+                            mChoreographer.postFrameCallback(this)
                         }
                     }
                 }
