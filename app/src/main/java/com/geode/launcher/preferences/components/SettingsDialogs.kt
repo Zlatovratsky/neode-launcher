@@ -169,7 +169,7 @@ fun FrameRateDialog(
     initialValue: Int,
     maxFrameRate: Int,
 ) {
-    var enteredValue = by remember {
+    var enteredValue by remember {
         mutableStateOf (
             initialValue.toString()
         )
