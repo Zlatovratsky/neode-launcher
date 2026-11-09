@@ -13,7 +13,7 @@ class Cocos2dxRenderer(private var handler: Cocos2dxGLSurfaceView) : GLSurfaceVi
     }
     
     companion object {
-        private var instance: Cocos2dxRenderer = null
+        private lateinit var instance: Cocos2dxRenderer
 
         fun initRenderer(renderer: Cocos2dxRenderer) {
             instance = renderer
