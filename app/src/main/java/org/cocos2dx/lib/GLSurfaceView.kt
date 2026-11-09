@@ -169,18 +169,18 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
 
         fun scheduleNextFrame(frameIntervalInNanos: Long, nowInNanos: Long) {
             if (mRenderer.mAnimationInterval == null) {
-                mChoreographer.postFrameCallback(this)
-            } else {
-                val animationIntervalInNanos = mRenderer.mAnimationInterval            
+                val animationIntervalInNanos = mRenderer!!.mAnimationInterval            
                 extraDelta += frameIntervalInNanos % animationIntervalInNanos
 
-                frameInterval = (animationIntervalInNanos / NANOSECONDS_PER_MILLISECONDS) + (extraDelta / NANOSECONDS_PER_MILLISECONDS)
+                val frameInterval = (animationIntervalInNanos / NANOSECONDS_PER_MILLISECONDS) + (extraDelta / NANOSECONDS_PER_MILLISECONDS)
                 extraDelta %= animationIntervalInNanos
                 
                 val delay = frameInterval - (extraDelta / NANOSECONDS_PER_MILLISECONDS)
                 val now = nowInNanos / NANOSECONDS_PER_MILLISECONDS
                 
                 mHandler.sendEmptyMessageAtTime(SCHEDULE_NEXT_FRAME, now + delay)
+            } else {
+                mChoreographer.postFrameCallback(this)
             }
         }
 
