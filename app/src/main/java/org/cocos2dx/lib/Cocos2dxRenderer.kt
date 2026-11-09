@@ -93,7 +93,11 @@ class Cocos2dxRenderer(private var handler: Cocos2dxGLSurfaceView) : GLSurfaceVi
     private var screenHeight = 0
     var sendResizeEvents = false
     var setFrameRate = false
-    override public var mAnimationInterval: Long? = null
+    private var mAnimationInterval: Long? = null
+
+    override fun getAnimationInterval() : Long? {
+        return mAnimationInterval
+    }
 
     fun limitFrameRate(rate: Int) {
         mAnimationInterval = NANOSECONDS_PER_SECOND/rate

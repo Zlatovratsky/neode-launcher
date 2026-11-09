@@ -102,7 +102,7 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
 
         fun handleOnResume()
 
-        public var mAnimationInterval: Long?
+        fun getAnimationInterval() : Long?
     }
     
     private lateinit var mRenderer: Renderer
@@ -169,7 +169,7 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
         }
 
         fun scheduleNextFrame(frameIntervalInNanos: Long) {
-            val animationIntervalInNanos = mRenderer.mAnimationInterval
+            val animationIntervalInNanos = mRenderer.getAnimationInterval()
             if (animationIntervalInNanos != null) {
                 val modifiedFrameTimeInNanos = (frameIntervalInNanos % animationIntervalInNanos)  
                 extraDelta += animationIntervalInNanos % NANOSECONDS_PER_MILLISECONDS
@@ -179,12 +179,10 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
                 
                 mHandler.sendEmptyMessageDelayed(SCHEDULE_NEXT_FRAME, delay)
             } else {
-                mChoreographer.postFrameCallback(this)
             }
         }
 
         fun unscheduleNextFrame() {
-            mChoreographer.removeFrameCallback(this)
             mHandler.removeMessages(SCHEDULE_NEXT_FRAME)
             mHandler.removeMessages(DRAW_FRAME)
         }
