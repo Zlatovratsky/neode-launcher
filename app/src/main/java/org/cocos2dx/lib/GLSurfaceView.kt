@@ -22,7 +22,6 @@ import android.opengl.EGLExt
 import android.opengl.EGLSurface
 
 private const val DRAW_FRAME = 2
-private const val SWAP_BUFFERS = 3
 
 private const val NANOSECONDS_PER_MILLISECONDS = 1000000L
 
@@ -130,58 +129,59 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
         }
 
         override public fun doFrame(frameTimeInNanos: Long) {
-            mHandler.sendEmptyMessage(SWAP_BUFFERS)
+            if (!mShouldSwap) {
+                mShouldSwap = true
+            }
         }
 
         public fun drawFrame() {
-            if (!mHasSurface || mPaused || mExited) {
-                scheduleNextFrame(0)
+            if (!mHasSurface || mExited) {
                 return
             }
             val frameStart = System.nanoTime()
             mRenderer.onDrawFrame()
+            if (mShouldSwap) {
+                mShouldSwap = false
+                when (mEGLHelper.swap()) {
+                    EGL14.EGL_SUCCESS -> mChoreographer.postFrameCallback(this)
+                    EGL14.EGL_CONTEXT_LOST -> {
+                        mEGLHelper.destroySurface()
+                        mEGLHelper.finish()
+                            
+                        mEGLHelper.start()
+                        synchronized(GLThreadManager) {
+                            mHasSurface = mEGLHelper.createSurface()
+                            if (mHasSurface) {
+                                mRenderer.onSurfaceCreated()
+                                mRenderer.onSurfaceChanged()
+                                mChoreographer.postFrameCallback(this)
+                            }
+                        }
+                    }
+                    else -> throw IllegalStateException("Surface is bad")
+                }
+            }
+
             val now = System.nanoTime()
             val frameTime = now - frameStart
             scheduleNextFrame(frameTime)
         }
-
-        protected fun swap() {
-            when (mEGLHelper.swap()) {
-                EGL14.EGL_SUCCESS -> mChoreographer.postFrameCallback(this)
-                EGL14.EGL_CONTEXT_LOST -> {
-                    mEGLHelper.destroySurface()
-                    mEGLHelper.finish()
-                        
-                    mEGLHelper.start()
-                    synchronized(GLThreadManager) {
-                        mHasSurface = mEGLHelper.createSurface()
-                        if (mHasSurface) {
-                            mRenderer.onSurfaceCreated()
-                            mRenderer.onSurfaceChanged()
-                            mChoreographer.postFrameCallback(this)
-                        }
-                    }
-                }
-                else -> throw IllegalStateException("Surface is bad")
-            }                
-        }
+                
 
         fun scheduleNextFrame(frameIntervalInNanos: Long) {
             val animationIntervalInNanos = mRenderer.getAnimationInterval()
             if (animationIntervalInNanos != null) {
                 val modifiedFrameTimeInNanos = (frameIntervalInNanos % animationIntervalInNanos)  
-                extraDelta += animationIntervalInNanos % NANOSECONDS_PER_MILLISECONDS
 
-                val delay = (animationIntervalInNanos / NANOSECONDS_PER_MILLISECONDS) - (modifiedFrameTimeInNanos / NANOSECONDS_PER_MILLISECONDS) + (extraDelta / NANOSECONDS_PER_MILLISECONDS)
-                extraDelta %= NANOSECONDS_PER_MILLISECONDS
+                val delay = (animationIntervalInNanos / NANOSECONDS_PER_MILLISECONDS) - (modifiedFrameTimeInNanos / NANOSECONDS_PER_MILLISECONDS)
                 
                 mHandler.sendEmptyMessageDelayed(DRAW_FRAME, delay)
             }
         }
 
         fun unscheduleNextFrame() {
-            mHandler.removeMessages(SWAP_BUFFERS)
             mHandler.removeMessages(DRAW_FRAME)
+            mChoreographer.removeFrameCallback(this)
         }
 
         public fun surfaceCreated() {
@@ -238,6 +238,7 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
                         synchronized(GLThreadManager) {
                             mRenderer.handleOnPause()
                             mPaused = true
+                            scheduleNextFrame(0)
                             (GLThreadManager as java.lang.Object).notifyAll()
                         }
                     }
@@ -331,10 +332,6 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
                     drawFrame()
                     return true
                 }
-                SWAP_BUFFERS -> {
-                    swap()
-                    return true
-                }
                 else -> {
                     msg.callback.run()
                     return true
@@ -343,7 +340,7 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
         }
 
 
-        private var extraDelta: Long = 0
+        private var mShouldSwap = true
 
         private var mHasSurface = false
         private var mPaused = true
