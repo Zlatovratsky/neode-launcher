@@ -343,7 +343,7 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
 
                 mEGLConfig = EGLConfigChooser.chooseConfig(mEGLDisplay)
                 
-                val attrib_list = intArrayOf(0x3098, 2, EGL14.EGL_NONE) 
+                val attrib_list = intArrayOf(0x3098, 3, EGL14.EGL_NONE) 
                 mEGLContext = EGL14.eglCreateContext(mEGLDisplay, mEGLConfig, EGL14.EGL_NO_CONTEXT, attrib_list, 0)
                 
                 if (mEGLContext == EGL14.EGL_NO_CONTEXT) {
@@ -420,7 +420,7 @@ open class GLSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
                 
                 private fun testConfig(display: EGLDisplay, attrib: ConfigValues): EGLConfig? {
                     val attribList = intArrayOf(
-                        EGL14.EGL_RENDERABLE_TYPE, EGL14.EGL_OPENGL_ES2_BIT,
+                        EGL14.EGL_RENDERABLE_TYPE, EGLExt.EGL_OPENGL_ES3_BIT_KHR,
                         EGL14.EGL_RED_SIZE, attrib.redSize,
                         EGL14.EGL_GREEN_SIZE, attrib.greenSize,
                         EGL14.EGL_BLUE_SIZE, attrib.blueSize,
